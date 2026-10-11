@@ -97,6 +97,10 @@ def parse_spec(request: str, payload: dict[str, Any]) -> TaskSpec:
     description = str(payload.get("description") or request).strip()[:3000]
     examples = _valid_cases(payload.get("examples"), "examples", max_items=3)[:3]
     tests = _valid_cases(payload.get("tests"), "tests", max_items=12)
+    if len(examples) != 2:
+        raise ValueError("The task specification must contain exactly 2 visible examples.")
+    if not 8 <= len(tests) <= 10:
+        raise ValueError("The task specification must contain between 8 and 10 hidden tests.")
     if not description:
         raise ValueError("description must not be empty.")
 
