@@ -17,6 +17,8 @@
 - [ ] Add a paper-ready results export and run metadata manifest
 
 - [x] One-line request to spec/tests, 10 techniques, real execution with timing, best-prompt ranking
+- [x] JSON-mode task-spec generation, schema validation, corrective retries, and cross-provider fallback
+- [x] Keep preset visible examples separate from hidden scoring tests
 - [ ] Import datasets (HumanEval/MBPP), multi-model batch runs, confidence intervals and paired significance tests
 
 ## Version 3 — web deployment
