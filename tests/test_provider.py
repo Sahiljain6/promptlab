@@ -47,7 +47,7 @@ class ProviderResponseFormatTests(unittest.TestCase):
 
         self.assertEqual(result.model, "gpt-oss:20b-cloud")
         self.assertEqual(factory.call_args.kwargs["base_url"], "https://ollama.com/v1")
-        self.assertEqual(create.call_args.kwargs["response_format"], {"type": "json_object"})
+        self.assertNotIn("response_format", create.call_args.kwargs)
 
 
 if __name__ == "__main__":

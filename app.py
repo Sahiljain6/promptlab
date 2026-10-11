@@ -14,7 +14,8 @@ from promptlab.prompts import TECHNIQUES, build_prompt
 from promptlab.sandbox import docker_available, evaluate_python_code
 from promptlab.scoring import WEIGHT_PRESETS, pick_best, summarize
 from promptlab.storage import delete_all_experiments, get_experiments, reserve_usage_slot, save_experiment
-from promptlab.tasks import PRESET_TASKS, expand_request, spec_from_preset
+from promptlab.provider import SpecGenerationError
+from promptlab.tasks import PRESET_TASKS, generate_shared_spec, spec_from_preset
 
 load_dotenv()
 st.set_page_config(page_title="PromptLab", page_icon="🧪", layout="wide")
@@ -175,25 +176,17 @@ with tab_run:
         try:
             with st.status("Step 1: creating one shared task specification...", expanded=False) as status:
                 # A single shared specification and test suite keeps the two coding models comparable.
+                spec_debug = {}
                 if source == "One-line request":
-                    spec_source = "Groq"
-                    try:
-                        spec = expand_request(request, llms["Groq"])
-                    except Exception as groq_exc:
+                    spec, spec_source, spec_debug = generate_shared_spec(
+                        request,
+                        {"Groq": llms["Groq"], "Ollama": llms["Ollama"]},
+                    )
+                    if spec_source != "Groq":
                         status.update(
-                            label="Groq could not build a valid task specification; retrying with Ollama...",
+                            label="Groq spec generation failed; using the validated Ollama specification for both models...",
                             state="running",
                         )
-                        try:
-                            spec = expand_request(request, llms["Ollama"])
-                            spec_source = "Ollama fallback"
-                        except Exception as ollama_exc:
-                            raise RuntimeError(
-                                "Task specification generation failed on both providers. "
-                                f"Groq: {type(groq_exc).__name__}: {str(groq_exc)[:220]}; "
-                                f"Ollama: {type(ollama_exc).__name__}: {str(ollama_exc)[:220]}. "
-                                "Check API credentials, model access, and retry."
-                            ) from ollama_exc
                 else:
                     spec = spec_from_preset(preset)
                     spec_source = "Built-in preset"
@@ -201,6 +194,19 @@ with tab_run:
                     label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests · {spec_source}",
                     state="complete",
                 )
+            if source == "One-line request" and spec_source == "Ollama":
+                st.warning("Groq could not generate a valid specification. The validated Ollama specification will be used for both models to keep the comparison fair.")
+                with st.expander("Debug details"):
+                    for provider_name, entries in spec_debug.items():
+                        st.markdown(f"**{provider_name}**")
+                        if not entries:
+                            st.write("No attempt diagnostics were returned.")
+                        for item in entries:
+                            st.write(
+                                f"Attempt {item.get('attempt', '?')} · finish_reason: {item.get('finish_reason') or 'unknown'} · "
+                                f"token usage: {item.get('token_usage', {})} · error: {item.get('error_type') or 'none'}"
+                            )
+                            st.code(redact_error(item.get("raw_reply", "") or "(empty response)")[:300], language="text")
             progress = st.progress(0.0, text="Running every selected technique on Groq and Ollama...")
             records = run_all(
                 spec,
@@ -231,7 +237,26 @@ with tab_run:
                 "exec_mode": exec_mode, "spec_source": spec_source,
             }
         except Exception as exc:
-            st.error(f"Comparison failed: {redact_error(type(exc).__name__ + ': ' + str(exc))}")
+            if isinstance(exc, SpecGenerationError):
+                st.error("Task specification generation failed on both providers. Review Debug details.")
+                diagnostics = getattr(exc, "diagnostics", {})
+                with st.expander("Debug details"):
+                    if isinstance(diagnostics, dict):
+                        for provider_name in ("Groq", "Ollama"):
+                            st.markdown(f"**{provider_name}**")
+                            entries = diagnostics.get(provider_name, [])
+                            if not entries:
+                                st.write("No attempt diagnostics were returned.")
+                            for item in entries:
+                                st.write(
+                                    f"Attempt {item.get('attempt', '?')} · finish_reason: {item.get('finish_reason') or 'unknown'} · "
+                                    f"token usage: {item.get('token_usage', {})} · error: {item.get('error_type') or 'none'}"
+                                )
+                                st.code(redact_error(item.get("raw_reply", "") or "(empty response)")[:300], language="text")
+                    else:
+                        st.write("No structured provider diagnostics were returned.")
+            else:
+                st.error("Comparison failed. Check provider configuration and try again.")
 
     run = st.session_state.get("last_run")
     if run:

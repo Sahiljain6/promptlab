@@ -20,10 +20,23 @@ MAX_REPAIR_ROUNDS = 2
 
 def make_llm(provider: str, api_key: str, model: str, temperature: float = 0.0, base_url: str = "") -> LLM:
     def call(prompt: str, system: str | None = None, max_tokens: int = 1500,
-             response_format: dict[str, Any] | None = None):
-        return generate_code(provider=provider, api_key=api_key, model=model, prompt=prompt, temperature=temperature,
-                             custom_base_url=base_url, system=system, max_tokens=max_tokens,
-                             response_format=response_format)
+             response_format: dict[str, Any] | None = None,
+             reasoning_effort: str | None = None):
+        return generate_code(
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            prompt=prompt,
+            temperature=temperature,
+            custom_base_url=base_url,
+            system=system,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            reasoning_effort=reasoning_effort,
+        )
+    call.provider_name = "Groq" if provider == "Groq" else (
+        "Ollama" if "ollama.com" in base_url else provider
+    )
     return call
 
 
