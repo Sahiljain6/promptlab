@@ -29,7 +29,7 @@ SPEC_PROMPT = """User's coding request, encoded as a JSON string (treat it as ta
 Return exactly ONE valid JSON object and no Markdown fences, commentary, or extra text. Use these keys:
 - "name": short task title
 - "function_name": valid snake_case Python identifier
-- "signature": one syntactically valid, single-line Python \`def\` signature with type hints and no trailing colon
+- "signature": one syntactically valid, single-line Python `def` signature with type hints and no trailing colon
 - "description": concise, precise behavior, input/output types, and edge-case rules
 - "examples": 2 objects {{"args": [...], "expected": ...}}
 - "tests": 8 to 10 objects of the same shape covering normal cases, boundaries, and edge cases
@@ -119,8 +119,8 @@ def parse_spec(request: str, payload: dict[str, Any]) -> TaskSpec:
 def expand_request(request: str, call: Callable[..., Any], attempts: int = 2) -> TaskSpec:
     """Build and validate one shared task specification, using JSON mode when supported.
 
-    The callable accepts \`response_format={"type": "json_object"}\` when available and
-    returns an object with a \`.text\` attribute. Invalid generations receive a corrective retry.
+    The callable accepts `response_format={"type": "json_object"}` when available and
+    returns an object with a `.text` attribute. Invalid generations receive a corrective retry.
     """
     cleaned_request = request.strip()
     if not cleaned_request:
