@@ -151,9 +151,10 @@ class PipelineTests(unittest.TestCase):
 
     def test_executor_handles_bad_code(self):
         tests = [{"args": [3], "expected": True}]
-        self.assertEqual(evaluate_python_code("def f(:\n", "is_prime", tests, mode="local")["status"], "SYNTAX ERROR")
-        self.assertEqual(evaluate_python_code("import os\ndef is_prime(n): return True\n", "is_prime", tests, mode="local")["status"], "BLOCKED")
-        self.assertEqual(evaluate_python_code("def is_prime(n):\n    while True: pass\n", "is_prime", tests, timeout_seconds=3, mode="local")["status"], "TIMEOUT")
+        with patch.dict(os.environ, {"PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR": "true"}):
+            self.assertEqual(evaluate_python_code("def f(:\\n", "is_prime", tests, mode="local")["status"], "SYNTAX ERROR")
+            self.assertEqual(evaluate_python_code("import os\\ndef is_prime(n): return True\\n", "is_prime", tests, mode="local")["status"], "BLOCKED")
+            self.assertEqual(evaluate_python_code("def is_prime(n):\\n    while True: pass\\n", "is_prime", tests, timeout_seconds=3, mode="local")["status"], "TIMEOUT")
 
 
     def test_dual_model_run_compares_provider_and_technique_pairs(self):
