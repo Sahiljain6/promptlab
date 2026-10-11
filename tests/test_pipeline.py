@@ -76,7 +76,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_json_extraction_handles_leading_prose_and_nested_objects(self):
         payload = {"outer": {"inner": 2}, "items": [{"value": "}"}]}
-        self.assertEqual(_extract_json("Here is the JSON:\\n" + json.dumps(payload)), payload)
+        self.assertEqual(_extract_json("Here is the JSON:\n" + json.dumps(payload)), payload)
 
     def test_task_spec_uses_json_mode_and_retries_invalid_response(self):
         calls = []
@@ -92,6 +92,19 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(calls[0]["response_format"], {"type": "json_object"})
         self.assertEqual(calls[1]["response_format"], {"type": "json_object"})
         self.assertIn("Correction required", calls[1]["prompt"])
+
+    def test_json_mode_unsupported_provider_uses_prompt_fallback(self):
+        calls = []
+
+        def legacy_provider(prompt, system=None, max_tokens=1500, response_format=None):
+            calls.append(response_format)
+            if response_format is not None:
+                raise RuntimeError("response_format json_object is not supported")
+            return NS(text=json.dumps(SPEC), latency_seconds=0.1, prompt_tokens=10, completion_tokens=10, model="fake")
+
+        spec = expand_request("check prime", legacy_provider, attempts=1)
+        self.assertEqual(spec.function_name, "is_prime")
+        self.assertEqual(calls, [{"type": "json_object"}, None])
 
     def test_task_spec_rejects_invalid_signature_and_duplicate_hidden_inputs(self):
         bad_signature = dict(SPEC, signature="def is_prime(: bool")
