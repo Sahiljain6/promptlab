@@ -1,6 +1,6 @@
 # PromptLab — Code Generation Accuracy Research
 
-PromptLab is a Streamlit web application for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It calls a real LLM API, compares five prompt templates, tests generated Python functions in a Docker container, and stores experiment results in SQLite for analysis and CSV export.
+PromptLab is a Streamlit web application for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It calls a real LLM API, compares five prompt templates, evaluates generated Python functions, and stores experiment results in SQLite for analysis and CSV export.
 
 ## Features
 
@@ -8,14 +8,15 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 - Real inference using Groq, OpenAI, or a custom OpenAI-compatible endpoint
 - Five techniques: zero-shot, few-shot, persona-based, structured specification, and stepwise planning
 - Preset tasks plus custom task and test-case editor
-- Docker-based test execution with network disabled, resource limits, read-only work mount, non-root user, and timeout
+- Cloud AI review through Hugging Face Router (predicts likely test outcomes by code inspection; it does not execute Python)
+- Optional local Docker test execution with network disabled, resource limits, read-only work mount, non-root user, and timeout
 - Correctness, test pass rate, model latency, and token usage when reported by the provider
 - SQLite history, aggregate charts, and CSV export
 
 ## Requirements
 
 - Python 3.10 or newer (Python 3.11 or 3.12 recommended)
-- For cloud test execution: a Judge0 RapidAPI key (create one through the Judge0 CE listing on RapidAPI). For local fallback: Docker Desktop installed and running
+- For cloud AI review: a Hugging Face access token with access to the configured Router model. For actual local test execution: Docker Desktop installed and running
 - API key for the selected model provider
 
 ## Windows setup
@@ -56,11 +57,13 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 
 7. Open the local URL printed in the terminal, usually http://localhost:8501.
 
-Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database.
+Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `HF_TOKEN` for cloud AI review; without it, the app attempts actual test execution through local Docker.
 
 ## Provider configuration
 
-The default provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in local `.env` or in Streamlit Cloud app Settings → Secrets. OpenAI and other compatible endpoints are also supported. Use `OPENAI_API_KEY` for OpenAI, or `PROMPTLAB_API_KEY`, `PROMPTLAB_BASE_URL`, and optionally `PROMPTLAB_MODEL` for a compatible endpoint. Configure `JUDGE0_API_KEY` to enable the hosted sandbox.
+The default code-generation provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in local `.env` or in Streamlit Cloud app Settings → Secrets. OpenAI and other compatible endpoints are also supported. Use `OPENAI_API_KEY` for OpenAI, or `PROMPTLAB_API_KEY`, `PROMPTLAB_BASE_URL`, and optionally `PROMPTLAB_MODEL` for a compatible code-generation endpoint.
+
+Cloud test review uses the Hugging Face Router with `HF_TOKEN` and optional `HF_TEST_MODEL` (default `zai-org/GLM-5.3:novita`). Add those values to Streamlit Cloud Settings → Secrets or your local `.env` file. The Hugging Face model predicts test outcomes by inspecting the code; it does not execute Python. These outcomes must be labeled and analyzed as AI estimates, not ground-truth runtime results.
 
 ## Run unit tests
 
@@ -90,7 +93,7 @@ API errors and runs not tested because Docker is unavailable should not be treat
 
 ## Safety notes
 
-Generated code is untrusted. Cloud execution can use Judge0 CE through its hosted API, which provides sandboxed execution with configurable time and memory limits. Local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
+Generated code is untrusted. Cloud AI review calls the Hugging Face Router and predicts outcomes from source code; it is not a secure execution sandbox and cannot verify actual runtime behavior. Actual local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
 
 ## Research limitations
 
