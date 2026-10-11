@@ -266,6 +266,8 @@ with tab_run:
             "Rank": row["rank"],
             "Provider": row["provider"],
             "Technique": row["technique_name"],
+            "Trials": row["trials"],
+            "Valid trials": row.get("valid_trials", row["trials"]),
             "Accuracy %": round(100 * row["accuracy"], 1),
             "Solved %": round(100 * row["solved_rate"], 1),
             "Generation time (s)": None if row["gen_latency_s"] is None else round(row["gen_latency_s"], 2),
