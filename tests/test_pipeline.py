@@ -21,7 +21,7 @@ BUGGY = "def is_prime(n):\n    return n > 1\n"
 
 
 def fake_llm(prompt, system=None, max_tokens=1500, response_format=None):
-    if "User\'s coding request" in prompt or "One-line request" in prompt:
+    if "User's coding request" in prompt or "One-line request" in prompt:
         return NS(text=json.dumps(SPEC), latency_seconds=0.1, prompt_tokens=10, completion_tokens=10, model="fake")
     zero_shot = prompt.startswith("Task:") and "Required function signature" not in prompt and "Input/output" not in prompt
     first_repair_round = ("Required function signature" in prompt and "docstring" not in prompt
