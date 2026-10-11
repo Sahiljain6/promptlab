@@ -85,7 +85,7 @@ Ground-truth tests are used by the evaluator and are not sent to the model.
 ## Metrics
 
 - **Task success rate:** percentage of generated solutions passing every test.
-- **Test pass rate:** passed cases divided by executed cases.
+- **Runtime test pass rate:** passed cases divided by actually executed cases. This metric is only valid for the local Docker executor; Hugging Face outcomes are estimates, not execution results.
 - **Latency:** API response time, excluding test execution.
 - **Token usage:** prompt/completion counts when returned by the provider.
 
