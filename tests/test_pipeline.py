@@ -17,7 +17,7 @@ SPEC = {"name": "Prime check", "function_name": "is_prime", "signature": "def is
                   [(-1, False), (0, False), (1, False), (3, True), (4, False), (17, True), (97, True), (100, False)]]
         + [{"args": [7], "expected": False}]}  # wrong on purpose (7 is prime): every candidate fails it
 GOOD = "def is_prime(n):\n    if n < 2:\n        return False\n    i = 2\n    while i * i <= n:\n        if n % i == 0:\n            return False\n        i += 1\n    return True\n"
-BUGGY = "def is_prime(n):\n    return n > 1\n"
+BUGGY = "def is_prime(n):\n    return n > 2\n"
 
 
 def fake_llm(prompt, system=None, max_tokens=1500, response_format=None):
