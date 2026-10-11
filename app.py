@@ -168,6 +168,8 @@ with tab_run:
             go = False
 
     if go:
+        # Avoid displaying a stale previous comparison if this run fails.
+        st.session_state.pop("last_run", None)
         keys = [t.key for t in TECHNIQUES if t.name in selected]
         evaluate = evaluator()
         try:
