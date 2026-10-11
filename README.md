@@ -1,12 +1,12 @@
 # PromptLab — Dual-Model Code Generation Research
 
-PromptLab is a Streamlit app for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It automatically sends the same task and selected prompt techniques to Groq and Ollama, evaluates the solutions, ranks every model/technique pair, and shows the highest-ranked response with the other outputs.
+PromptLab is a Streamlit app for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It automatically compares Groq and Ollama across prompt-engineering techniques, evaluates solutions, ranks provider/technique pairs, and has an optional Gemini backup that stays idle unless both primary providers fail.
 
 ## What it does
 
 1. Enter a one-line coding request or select a preset task.
-2. Groq creates a shared function specification, visible examples, and hidden test cases for a one-line request. The API call enables JSON mode; malformed or incomplete responses receive a corrective retry, and the app can fall back to Ollama if Groq still cannot produce a valid specification.
-3. PromptLab sends each selected technique to both Groq and Ollama automatically. There is no provider/model selector in the UI.
+2. Groq creates a shared function specification, visible examples, and hidden test cases for a one-line request. If it cannot create a valid specification, PromptLab tries Ollama and then (only if both primary providers fail) the optional Gemini backup.
+3. PromptLab sends each selected technique to Groq and Ollama automatically. Gemini stays idle on normal runs; it receives a technique prompt only if both primary providers return API errors for that same technique/trial.
 4. Compare estimated/observed correctness, solved rate, latency, token usage, and execution time where available.
 5. Rank all model/technique combinations with configurable score weights.
 6. View every generated code solution, the best-ranked prompt/code, and example/custom outputs.
@@ -24,6 +24,10 @@ In your app dashboard, open **Settings → Secrets** and add:
     OLLAMA_API_KEY = "your-ollama-cloud-api-key"
     PROMPTLAB_ACCESS_PASSWORD = "replace-with-a-long-random-password"
 
+Optional backup key (Gemini is never called during a successful primary run):
+
+    GEMINI_API_KEY = "your-gemini-api-key"
+
 The app is locked until PROMPTLAB_ACCESS_PASSWORD is configured. Visitors must enter that password before the app can use your provider keys. Do not share this password publicly. For stronger protection, make the Streamlit app private/restricted as well.
 
 Optional backend defaults:
@@ -31,6 +35,7 @@ Optional backend defaults:
     GROQ_MODEL = "openai/gpt-oss-20b"
     OLLAMA_MODEL = "gpt-oss:20b-cloud"
     OLLAMA_BASE_URL = "https://ollama.com/v1"
+    GEMINI_MODEL = "gemini-3.8-flash"
     GROQ_TEST_MODEL = "openai/gpt-oss-20b"
     PROMPTLAB_MAX_RUNS_PER_HOUR = "6"
     PROMPTLAB_ENABLE_DOCKER_EXECUTION = "false"
@@ -106,7 +111,8 @@ If a one-line request fails while creating the shared task specification:
 
 - PromptLab requests JSON mode from the provider API instead of relying on prompt wording alone.
 - It extracts a valid JSON object even when a compatible provider adds brief leading prose, validates the function signature and test data, and retries an invalid response once.
-- If Groq still fails, it tries Ollama to build the shared specification. Both coding models still receive that same specification and hidden test suite.
+- If Groq fails to build the shared specification, it tries Ollama. If Ollama also fails, it tries Gemini only when GEMINI_API_KEY is configured. Both coding models still receive the same validated specification and hidden test suite.
+- During code generation, Gemini is also used as an emergency fallback only when both Groq and Ollama return API errors for the same technique/trial. Empty provider responses count as API errors; a valid response that simply fails tests does not trigger Gemini.
 - Requests are limited to 500 characters. Simplify an unusually complicated request or use the **Preset benchmark task** option to check whether provider credentials and model access work.
 - Check that `GROQ_MODEL` and `OLLAMA_MODEL` are available to the configured accounts. The app will show the provider and error type if both task-specification attempts fail.
 - JSON mode improves syntactic validity but can still fail on edge cases, and it does not guarantee that every generated expected value is mathematically correct. Verify generated test expectations before treating accuracy as research-grade.
@@ -130,7 +136,8 @@ The Groq model configured by default supports JSON mode and structured outputs; 
 - promptlab/prompts.py — prompt templates and code extraction.
 - promptlab/tasks.py — one-line request specification and preset tasks.
 - promptlab/pipeline.py — concurrent technique/model runs and self-repair.
-- promptlab/provider.py — Groq and OpenAI-compatible provider calls.
+- promptlab/provider.py — Groq and OpenAI-compatible provider calls, including Gemini's OpenAI-compatible endpoint.
+- tests/test_fallback_provider.py — verifies that Gemini is not called unless primary providers fail.
 - promptlab/sandbox.py — Docker, developer-only local runner, and Groq AI-estimate evaluator.
 - promptlab/scoring.py — suspect-test filtering, per-pair summary, scoring and best-response selection.
 - promptlab/storage.py — SQLite history, migration, and usage quota.
