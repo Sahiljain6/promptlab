@@ -8,11 +8,11 @@ from promptlab.pipeline import run_all, show_outputs
 from promptlab.prompts import TECHNIQUES, build_prompt, clean_generated_code
 from promptlab.sandbox import evaluate_python_code
 from promptlab.scoring import WEIGHT_PRESETS, pick_best, summarize
-from promptlab.tasks import expand_request
+from promptlab.tasks import _extract_json, expand_request, parse_spec
 
 SPEC = {"name": "Prime check", "function_name": "is_prime", "signature": "def is_prime(n: int) -> bool:",
         "description": "Return True if n is prime.",
-        "examples": [{"args": [2], "expected": True}, {"args": [4], "expected": False}],
+        "examples": [{"args": [2], "expected": True}, {"args": [5], "expected": True}],
         "tests": [{"args": [a], "expected": e} for a, e in
                   [(-1, False), (0, False), (1, False), (3, True), (4, False), (17, True), (97, True), (100, False)]]
         + [{"args": [7], "expected": False}]}  # wrong on purpose (7 is prime): every candidate fails it
@@ -20,8 +20,8 @@ GOOD = "def is_prime(n):\n    if n < 2:\n        return False\n    i = 2\n    wh
 BUGGY = "def is_prime(n):\n    return n > 1\n"
 
 
-def fake_llm(prompt, system=None, max_tokens=1500):
-    if "One-line request" in prompt:
+def fake_llm(prompt, system=None, max_tokens=1500, response_format=None):
+    if "User\'s coding request" in prompt or "One-line request" in prompt:
         return NS(text=json.dumps(SPEC), latency_seconds=0.1, prompt_tokens=10, completion_tokens=10, model="fake")
     zero_shot = prompt.startswith("Task:") and "Required function signature" not in prompt and "Input/output" not in prompt
     first_repair_round = ("Required function signature" in prompt and "docstring" not in prompt
@@ -72,7 +72,34 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(spec.function_name, "is_prime")
         self.assertFalse(spec.signature.endswith(":"))
         with self.assertRaises(ValueError):
-            expand_request("x", lambda *a, **k: NS(text="not json"))
+            expand_request("x", lambda *a, **k: NS(text="not json"), attempts=1)
+
+    def test_json_extraction_handles_leading_prose_and_nested_objects(self):
+        payload = {"outer": {"inner": 2}, "items": [{"value": "}"}]}
+        self.assertEqual(_extract_json("Here is the JSON:\\n" + json.dumps(payload)), payload)
+
+    def test_task_spec_uses_json_mode_and_retries_invalid_response(self):
+        calls = []
+
+        def flaky_llm(prompt, system=None, max_tokens=1500, response_format=None):
+            calls.append({"prompt": prompt, "response_format": response_format})
+            if len(calls) == 1:
+                return NS(text="I will explain the algorithm first, rather than returning JSON.")
+            return NS(text=json.dumps(SPEC), latency_seconds=0.1, prompt_tokens=10, completion_tokens=10, model="fake")
+
+        spec = expand_request("check prime", flaky_llm, attempts=2)
+        self.assertEqual(spec.function_name, "is_prime")
+        self.assertEqual(calls[0]["response_format"], {"type": "json_object"})
+        self.assertEqual(calls[1]["response_format"], {"type": "json_object"})
+        self.assertIn("Correction required", calls[1]["prompt"])
+
+    def test_task_spec_rejects_invalid_signature_and_duplicate_hidden_inputs(self):
+        bad_signature = dict(SPEC, signature="def is_prime(: bool")
+        with self.assertRaises(ValueError):
+            parse_spec("check prime", bad_signature)
+        duplicate = dict(SPEC, tests=SPEC["tests"] + [{"args": [2], "expected": True}])
+        with self.assertRaises(ValueError):
+            parse_spec("check prime", duplicate)
 
     def test_full_run_ranks_and_flags_suspect_tests(self):
         spec = expand_request("check prime", fake_llm)
