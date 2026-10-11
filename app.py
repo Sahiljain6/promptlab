@@ -32,7 +32,7 @@ with st.sidebar:
     model = st.text_input("Model ID", value=model_default)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     st.divider()
-    st.caption("Docker Desktop must be running to execute generated code. The evaluator does not execute code in the Streamlit process.")
+    judge0_api_key = st.text_input("Judge0 RapidAPI key (cloud sandbox)", value="", type="password", help="Optional for cloud deployment. A key enables remote isolated execution; it is used for this session only.")\n    st.caption("Cloud: enter a Judge0 RapidAPI key to run tests in a separate sandbox. Local fallback: Docker Desktop.")
 
 tab_run, tab_history, tab_method = st.tabs(["Run experiment", "History & analysis", "Research protocol"])
 
@@ -73,7 +73,7 @@ with tab_run:
                 generated = generate_code(provider=provider, api_key=api_key, model=model, prompt=prompt,
                                           temperature=temperature, custom_base_url=base_url)
                 code = clean_generated_code(generated.text)
-                evaluation = evaluate_python_code(code, function_name, tests)
+                evaluation = evaluate_python_code(code, function_name, tests, judge0_api_key=judge0_api_key)
                 record = {
                     "task_name": task_name, "function_name": function_name, "provider": provider,
                     "model": generated.model, "technique_key": technique.key, "technique_name": technique.name,
