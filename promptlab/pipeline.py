@@ -19,9 +19,11 @@ MAX_REPAIR_ROUNDS = 2
 
 
 def make_llm(provider: str, api_key: str, model: str, temperature: float = 0.0, base_url: str = "") -> LLM:
-    def call(prompt: str, system: str | None = None, max_tokens: int = 1500):
+    def call(prompt: str, system: str | None = None, max_tokens: int = 1500,
+             response_format: dict[str, Any] | None = None):
         return generate_code(provider=provider, api_key=api_key, model=model, prompt=prompt, temperature=temperature,
-                             custom_base_url=base_url, system=system, max_tokens=max_tokens)
+                             custom_base_url=base_url, system=system, max_tokens=max_tokens,
+                             response_format=response_format)
     return call
 
 
