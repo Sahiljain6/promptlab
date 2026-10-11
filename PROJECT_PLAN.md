@@ -22,7 +22,8 @@
 ## Version 3 — web deployment
 - [ ] Separate frontend from isolated runner service
 - [ ] Use remote disposable containers or a hardened code-execution service
-- [ ] Add authentication, rate limiting, quotas, and secret management
+- [x] Add app-password gate, per-instance run quota, secret management, redacted errors, and Docker execution opt-in
+- [ ] Add platform-level identity/authentication, provider-side budgets, monitoring, and a hardened remote execution service
 - [ ] Add PostgreSQL if multiple users need shared history
 
-Do not deploy the local Docker execution feature directly to an untrusted public environment.
+Security status: the hosted UI defaults to Groq AI-estimate mode and does not expose host-local subprocess execution. The Docker runner is admin-opt-in and hardened with basic resource/isolation settings, but this is not a full penetration test or a guarantee of perfect isolation. Keep the Streamlit app private/restricted and use provider-side quotas; prefer a separately managed hardened runner before allowing arbitrary generated code execution for untrusted users.

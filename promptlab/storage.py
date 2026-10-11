@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -82,3 +82,35 @@ def delete_all_experiments() -> None:
     with connect() as connection:
         connection.execute("DELETE FROM experiments")
         connection.commit()
+
+
+def reserve_usage_slot(limit: int = 6, window_minutes: int = 60) -> tuple[bool, int]:
+    """Atomically reserve one app run from a global per-instance rolling-window quota.
+
+    This protects one running app instance from accidental/ordinary overuse. It is not a
+    substitute for provider-side quotas or platform-level authentication.
+    """
+    if limit < 1 or window_minutes < 1:
+        raise ValueError("Quota limit and window must be positive.")
+    initialize()
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(minutes=window_minutes)).isoformat(timespec="seconds")
+    retention = (now - timedelta(days=1)).isoformat(timespec="seconds")
+    with connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        connection.execute("DELETE FROM usage_events WHERE created_at < ?", (retention,))
+        used = int(connection.execute(
+            "SELECT COUNT(*) FROM usage_events WHERE created_at >= ?", (cutoff,)
+        ).fetchone()[0])
+        if used >= limit:
+            connection.commit()
+            return False, 0
+        connection.execute("INSERT INTO usage_events (created_at) VALUES (?)", (now.isoformat(timespec="seconds"),))
+        connection.commit()
+        return True, max(0, limit - used - 1)

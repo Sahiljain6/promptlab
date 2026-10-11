@@ -1,118 +1,121 @@
 # PromptLab — Dual-Model Code Generation Research
 
-PromptLab is a Streamlit application for the research project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It sends each selected prompt-engineering technique to **Groq and Gemini automatically**, tests the generated Python implementations, scores every model/technique pair, and shows the best-ranked response along with all generated code outputs.
+PromptLab is a Streamlit app for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It automatically sends the same task and selected prompt techniques to Groq and Ollama, evaluates the solutions, ranks every model/technique pair, and shows the highest-ranked response with the other outputs.
 
 ## What it does
 
-1. Enter a one-line coding request or choose a preset benchmark.
-2. Groq creates a shared function specification, visible examples, and hidden test cases for a one-line request so both coding models face the same benchmark.
-3. PromptLab sends the same selected techniques to both **Groq** and **Gemini**; there is no provider or model selector in the interface.
-4. Compare correctness, solved rate, generation latency, token usage, and execution time where available.
-5. Rank every provider/technique pair using a configurable weighted score.
-6. Display every generated solution and detailed test outcomes, plus the best-ranked prompt/code and example/custom output.
-7. Save experiment history and download CSV/JSON results.
+1. Enter a one-line coding request or select a preset task.
+2. Groq creates a shared function specification, examples, and hidden test cases for a one-line request.
+3. PromptLab sends each selected technique to both Groq and Ollama automatically. There is no provider/model selector in the UI.
+4. Compare estimated/observed correctness, solved rate, latency, token usage, and execution time where available.
+5. Rank all model/technique combinations with configurable score weights.
+6. View every generated code solution, the best-ranked prompt/code, and example/custom outputs.
+7. Save experiment history and export CSV/JSON.
 
 The ten prompt techniques are zero-shot, few-shot, persona-based, function signature + docstring, structured specification, private planning, chain-of-thought, structured chain-of-thought, decomposition, and self-repair.
 
-## Requirements
+## Required configuration
 
-- Python 3.10 or newer (Python 3.11 or 3.12 recommended).
-- Both a Groq API key and a Gemini API key.
-- Optional Docker Desktop for stronger code-execution isolation.
+### Streamlit Community Cloud
 
-## Configure API keys
+In your app dashboard, open **Settings → Secrets** and add:
 
-### Streamlit Cloud
+    GROQ_API_KEY = "your-groq-api-key"
+    OLLAMA_API_KEY = "your-ollama-cloud-api-key"
+    PROMPTLAB_ACCESS_PASSWORD = "replace-with-a-long-random-password"
 
-Open your Streamlit app dashboard → **Settings → Secrets**. Store both keys there:
+The app is locked until PROMPTLAB_ACCESS_PASSWORD is configured. Visitors must enter that password before the app can use your provider keys. Do not share this password publicly. For stronger protection, make the Streamlit app private/restricted as well.
 
-```toml
-GROQ_API_KEY = "your-groq-api-key"
-GEMINI_API_KEY = "your-gemini-api-key"
-```
+Optional backend defaults:
 
-The keys are read on the server and are not rendered as input fields in the interface. Never commit real API keys to GitHub. If the app is public, visitors can still trigger API usage and costs, so restrict access or add authentication and rate limits.
+    GROQ_MODEL = "openai/gpt-oss-20b"
+    OLLAMA_MODEL = "gpt-oss:20b-cloud"
+    OLLAMA_BASE_URL = "https://ollama.com/v1"
+    GROQ_TEST_MODEL = "openai/gpt-oss-20b"
+    PROMPTLAB_MAX_RUNS_PER_HOUR = "6"
+    PROMPTLAB_ENABLE_DOCKER_EXECUTION = "false"
+
+Model IDs and provider endpoints are configured on the server; visitors cannot change them in the interface. If the default Ollama model is not available on your account, set OLLAMA_MODEL to a model your Ollama account can access.
+
+Ollama Cloud's OpenAI-compatible endpoint is https://ollama.com/v1 and uses OLLAMA_API_KEY. See [Ollama OpenAI compatibility](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx).
 
 ### Local Windows setup
 
-1. Clone or download the repository and open PowerShell in the project folder.
+1. Clone/download the repository and open PowerShell in the project folder.
 2. Create and activate a virtual environment:
 
-   ```powershell
-   py -m venv .venv
-   .venv\Scripts\Activate.ps1
-   ```
+       py -m venv .venv
+       .venv\Scripts\Activate.ps1
 
 3. Install dependencies:
 
-   ```powershell
-   python -m pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+       python -m pip install --upgrade pip
+       pip install -r requirements.txt
 
-4. Copy `.env.example` to `.env` and set both keys:
+4. Copy .env.example to .env. Add real keys and choose a long random value for PROMPTLAB_ACCESS_PASSWORD. Never commit .env.
 
-   ```powershell
-   Copy-Item .env.example .env
-   ```
+       Copy-Item .env.example .env
 
 5. Start the app:
 
-   ```powershell
-   python -m streamlit run app.py
-   ```
+       python -m streamlit run app.py
 
-6. Open the localhost URL shown in the terminal, typically http://localhost:8501.
+6. Open the local URL shown in the terminal, typically http://localhost:8501.
 
-## Backend model defaults
+For a local Ollama server, set OLLAMA_BASE_URL to http://localhost:11434/v1 and OLLAMA_API_KEY to the ignored placeholder value ollama. Do this only for local development; localhost inside a cloud deployment is the app container, not your computer.
 
-The app fixes the model IDs in backend settings, so visitors cannot select a different model:
-- Groq: `openai/gpt-oss-20b`
-- Gemini: `gemini-3.8-flash`
+## Evaluation and execution safety
 
-Optional backend overrides can be set as Streamlit Secrets or local environment variables: `GROQ_MODEL`, `GEMINI_MODEL`, and `GROQ_TEST_MODEL`. For a comparable experiment, keep the IDs stable across trials.
+- **AI estimate (default):** Groq predicts likely outcomes by inspecting generated code and test cases. This is not actual Python execution, so results must be labeled as estimates.
+- **Docker execution:** Only appears when Docker is available and the app owner explicitly sets PROMPTLAB_ENABLE_DOCKER_EXECUTION=true. The runner disables network access, uses a read-only work mount, a non-root UID, dropped Linux capabilities, resource limits, and timeouts.
+- **Host-local Python subprocess:** Not available in the web UI. The underlying developer-only mode requires PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR=true and should not be enabled for a public app.
+- **Auto mode:** Does not fall back to host-local Python when Docker is unavailable.
 
-Gemini uses Google's OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai/`; the API key is the Gemini key. See [Google's OpenAI compatibility guide](https://ai.google.dev/gemini-api/docs/openai).
+Generated code is untrusted. AI estimate is the recommended mode for a hosted demo. If actual execution is needed, use an isolated Docker environment and review its security settings before enabling the feature.
 
-## Test evaluation modes
+## Security changes
 
-- **AI estimate via Groq (default):** asks Groq to predict likely outcomes by inspecting each generated solution. It does not execute Python, so label these results as AI estimates rather than verified correctness.
-- **Auto:** uses Docker if available; otherwise it uses a local Python subprocess.
-- **Local Python:** executes the code in a subprocess with time/resource limits and blocks some imports as a deterrent. This is not a security boundary.
-- **Docker sandbox:** runs the code in a Docker container with network disabled, resource limits and a read-only work directory.
+The current version adds these protective measures:
 
-For research-grade correctness, prefer actual execution inside Docker and validate generated test expectations. Do not run untrusted generated code in a public service using an ordinary subprocess without additional isolation.
+- App access password required; the app fails closed if PROMPTLAB_ACCESS_PASSWORD is missing.
+- API keys and endpoint settings are loaded from Streamlit Secrets or local environment variables, not shown as input fields.
+- Provider errors are redacted before being displayed.
+- A SQLite rolling-hour quota limits the number of new comparisons per running app instance (default six, configurable up to thirty).
+- Request length, trial count, and custom example argument count are capped.
+- Host-local subprocess execution is hidden from the UI and requires an explicit developer-only environment flag.
+- Docker auto mode does not fall back to host execution.
+- Docker has a tighter read-only/non-root/resource-limited configuration and temporary file permissions are set so the non-root runner can read the files.
 
-## Scoring and metrics
+These are defense-in-depth controls, not a substitute for platform-level access restriction, provider-side usage budgets, monitoring, and a security review. A shared app password can be forwarded; keep the Streamlit app restricted to intended users. A per-instance quota may reset if the app restarts or uses another instance.
 
-The default score is:
+## Scoring
 
-`score = 100 × (0.70 × accuracy + 0.10 × speed + 0.10 × token efficiency + 0.10 × execution efficiency)`
+The default composite score is:
 
-The sidebar offers Accuracy first, Balanced, and Speed & cost first weight presets. Accuracy excludes test cases that every model/technique failed, which are flagged as potentially suspect. If a provider does not report token counts, PromptLab estimates tokens using characters divided by four.
+    score = 100 × (0.70 × accuracy + 0.10 × speed + 0.10 × token efficiency + 0.10 × execution efficiency)
 
-Metrics include adjusted test accuracy, solved rate, generation latency, token usage, execution time where measured, and the composite score.
+The app supports Accuracy first, Balanced, and Speed & cost first weighting. A test case failed by every variant may be flagged as potentially suspect and excluded from adjusted accuracy. Review such tests; do not automatically assume every all-model failure means the expected value is wrong.
 
 ## Run unit tests
 
-```powershell
-python -m unittest discover -s tests -v
-```
+    python -m unittest discover -s tests -v
 
-## Project structure
+## Research notes
 
-| File | Purpose |
-|---|---|
-| `app.py` | Streamlit UI, dual-model comparison, charts, results, and exports |
-| `promptlab/prompts.py` | Ten prompt templates and code extraction |
-| `promptlab/tasks.py` | Request-to-specification flow and preset tasks |
-| `promptlab/pipeline.py` | Concurrent model/technique runs and self-repair |
-| `promptlab/provider.py` | OpenAI-compatible clients for Groq, Gemini, and optional custom endpoints |
-| `promptlab/sandbox.py` | Docker, local, and Groq AI-estimate evaluation modes |
-| `promptlab/scoring.py` | Suspect-test filtering, ranking, composite scores, best-response selection |
-| `promptlab/storage.py` | SQLite experiment history and schema migration |
-| `tests/` | Prompt, pipeline, and execution tests |
+- Use the same request, test cases, temperature, and model versions for comparisons.
+- Run several tasks and repeated trials before drawing conclusions.
+- AI-estimated outcomes must not be reported as verified pass rates.
+- Generated tests can have incorrect expected values; validate them independently for research-grade claims.
+- Token counts may be estimated when a provider does not report usage.
 
-## Research cautions
+## Repository structure
 
-Use the same task definition and tests for both models, repeat trials, compare more than one task family, and retain raw records. A single model can make mistakes when creating specifications or judging code. AI-estimated results are not execution results; do not present them as verified pass rates.
+- app.py — Streamlit interface, access gate, paired-model comparison, charts and exports.
+- promptlab/prompts.py — prompt templates and code extraction.
+- promptlab/tasks.py — one-line request specification and preset tasks.
+- promptlab/pipeline.py — concurrent technique/model runs and self-repair.
+- promptlab/provider.py — Groq and OpenAI-compatible provider calls.
+- promptlab/sandbox.py — Docker, developer-only local runner, and Groq AI-estimate evaluator.
+- promptlab/scoring.py — suspect-test filtering, per-pair summary, scoring and best-response selection.
+- promptlab/storage.py — SQLite history, migration, and usage quota.
+- tests/ — prompt/pipeline/executor tests.

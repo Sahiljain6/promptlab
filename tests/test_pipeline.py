@@ -1,5 +1,7 @@
 import json
+import os
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace as NS
 
 from promptlab.pipeline import run_all, show_outputs
@@ -32,7 +34,9 @@ def fake_llm(prompt, system=None, max_tokens=1500):
 
 
 def local_eval(code, fn, tests):
-    return evaluate_python_code(code, fn, tests, timeout_seconds=10, mode="local")
+    # Explicitly opt in only within tests; the web app never exposes this unsafe executor.
+    with patch.dict(os.environ, {"PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR": "true"}):
+        return evaluate_python_code(code, fn, tests, timeout_seconds=10, mode="local")
 
 
 class PromptTests(unittest.TestCase):
@@ -85,6 +89,29 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(repaired["solved"])
         out = show_outputs(best["generated_code"], spec, local_eval, extra_args=[13])
         self.assertEqual(out[-1]["output"], "True")
+
+    def test_auto_mode_does_not_fall_back_to_host_execution(self):
+        with patch("promptlab.sandbox.docker_available", return_value=False):
+            result = evaluate_python_code(
+                "def is_prime(n): return True\n",
+                "is_prime",
+                [{"args": [3], "expected": True}],
+                mode="auto",
+            )
+        self.assertEqual(result["status"], "NOT TESTED")
+        self.assertIn("will not fall back", result["error"])
+
+    def test_local_executor_is_disabled_without_explicit_flag(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR", None)
+            result = evaluate_python_code(
+                "def is_prime(n): return True\n",
+                "is_prime",
+                [{"args": [3], "expected": True}],
+                mode="local",
+            )
+        self.assertEqual(result["status"], "NOT TESTED")
+        self.assertIn("disabled by default", result["error"])
 
     def test_executor_handles_bad_code(self):
         tests = [{"args": [3], "expected": True}]

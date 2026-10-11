@@ -45,9 +45,11 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start:end + 1])
 
 
-def _valid_cases(cases: Any, label: str) -> list[dict[str, Any]]:
+def _valid_cases(cases: Any, label: str, max_items: int = 12) -> list[dict[str, Any]]:
     if not isinstance(cases, list) or not cases:
         raise ValueError(f"'{label}' must be a non-empty list.")
+    if len(cases) > max_items:
+        raise ValueError(f"'{label}' may contain at most {max_items} items.")
     clean = []
     for case in cases:
         if not isinstance(case, dict) or not isinstance(case.get("args"), list) or "expected" not in case:
@@ -69,8 +71,8 @@ def parse_spec(request: str, payload: dict[str, Any]) -> TaskSpec:
         description=str(payload.get("description", "")).strip() or request.strip(),
         function_name=function_name,
         signature=signature,
-        examples=_valid_cases(payload.get("examples"), "examples")[:3],
-        tests=_valid_cases(payload.get("tests"), "tests"),
+        examples=_valid_cases(payload.get("examples"), "examples", max_items=3)[:3],
+        tests=_valid_cases(payload.get("tests"), "tests", max_items=12),
     )
 
 

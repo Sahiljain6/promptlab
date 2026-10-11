@@ -123,8 +123,9 @@ def evaluate_python_code(
 ) -> dict[str, Any]:
     """Run generated code against tests.
 
-    mode: "auto" (Docker if available, else local Python), "docker", "local", or "ai"
-    (Groq predicts outcomes without executing; labelled as an estimate).
+    mode: "auto" (Docker only; no host fallback), "docker", "local", or "ai".
+    Local subprocess execution requires PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR=true and is for developer-only tests.
+    "ai" asks Groq to predict outcomes without executing code and labels the result as an estimate.
     """
     try:
         ast.parse(code)
@@ -143,15 +144,31 @@ def evaluate_python_code(
         out.update({"exec_ms": None, "mode": "ai"})
         return out
 
-    use_docker = mode == "docker" or (mode == "auto" and docker_available())
-    if mode == "docker" and not docker_available():
-        return _not_tested(len(tests), "Docker is not available. Start Docker Desktop or choose Local Python.")
-    if not use_docker:
+    if mode not in {"auto", "docker", "local"}:
+        return _not_tested(len(tests), f"Unknown execution mode: {mode!r}")
+
+    if mode == "local" and os.getenv("PROMPTLAB_ALLOW_UNSAFE_LOCAL_EXECUTOR", "").strip().lower() != "true":
+        return _not_tested(
+            len(tests),
+            "Host-local Python execution is disabled by default because generated code is untrusted. "
+            "Use AI estimate or an isolated Docker sandbox. The unsafe local executor is for developer-only testing.",
+        )
+
+    available = docker_available() if mode in {"auto", "docker"} else False
+    if mode in {"auto", "docker"} and not available:
+        return _not_tested(
+            len(tests),
+            "Docker is unavailable. Auto mode will not fall back to running generated code on the host. "
+            "Enable Docker for actual execution or select AI estimate.",
+        )
+    use_docker = mode in {"auto", "docker"}
+
+    if mode == "local":
         blocked = _blocked_import(code)
         if blocked:
             return {
                 "status": "BLOCKED", "passed_tests": 0, "total_tests": len(tests), "task_passed": False, "results": [],
-                "error": f"Local executor blocked the import of '{blocked}'. Use Docker mode to allow it.",
+                "error": f"Developer-only local executor blocked import '{blocked}'. This import filter is not a security boundary.",
                 "exec_ms": None, "mode": "local",
             }
 
@@ -163,11 +180,15 @@ def evaluate_python_code(
         (work / "config.json").write_text(json.dumps({"function_name": function_name, "tests": tests}), encoding="utf-8")
         try:
             if use_docker:
+                # The container uses a non-root UID; make temporary inputs readable to it.
+                os.chmod(work, 0o755)
+                for item in work.iterdir():
+                    os.chmod(item, 0o444)
                 cmd = [
                     "docker", "run", "--rm", "--name", run_name, "--network=none", "--memory=128m",
-                    "--cpus=0.5", "--pids-limit=32", "--read-only",
-                    "--tmpfs=/tmp:rw,noexec,nosuid,size=16m", "--security-opt=no-new-privileges",
-                    "--cap-drop=ALL", "--user=65534:65534", "--mount",
+                    "--memory-swap=128m", "--cpus=0.5", "--pids-limit=32", "--ulimit", "nofile=64:64",
+                    "--read-only", "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m",
+                    "--security-opt=no-new-privileges:true", "--cap-drop=ALL", "--user=65534:65534", "--mount",
                     f"type=bind,source={work},target=/work,readonly", "--workdir=/work",
                     "python:3.12-slim", "python", "-I", "-S", "/work/runner.py", "/work",
                 ]
@@ -202,6 +223,10 @@ def evaluate_python_code(
                 try:
                     subprocess.run(["docker", "rm", "-f", run_name], capture_output=True, text=True, timeout=5)
                 except (OSError, subprocess.TimeoutExpired):
+                    pass
+                try:
+                    os.chmod(work, 0o700)
+                except OSError:
                     pass
 
         mode_used = "docker" if use_docker else "local"

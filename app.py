@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
+from urllib.parse import urlparse
 
 import pandas as pd
 import streamlit as st
@@ -11,15 +13,11 @@ from promptlab.pipeline import make_llm, run_all, show_outputs
 from promptlab.prompts import TECHNIQUES, build_prompt
 from promptlab.sandbox import docker_available, evaluate_python_code
 from promptlab.scoring import WEIGHT_PRESETS, pick_best, summarize
-from promptlab.storage import delete_all_experiments, get_experiments, save_experiment
+from promptlab.storage import delete_all_experiments, get_experiments, reserve_usage_slot, save_experiment
 from promptlab.tasks import PRESET_TASKS, expand_request, spec_from_preset
 
 load_dotenv()
 st.set_page_config(page_title="PromptLab", page_icon="🧪", layout="wide")
-st.title("🧪 PromptLab")
-st.caption("Compare Groq and Gemini automatically across prompt-engineering techniques for code generation.")
-
-
 def secret_or_env(name: str, default: str = "") -> str:
     try:
         value = st.secrets.get(name, os.getenv(name, default))
@@ -28,44 +26,100 @@ def secret_or_env(name: str, default: str = "") -> str:
     return str(value or "")
 
 
-# Model/provider selection stays in the backend. Users only configure two secret API keys.
+access_password = secret_or_env("PROMPTLAB_ACCESS_PASSWORD")
+if not access_password:
+    st.error("PromptLab is locked. Configure PROMPTLAB_ACCESS_PASSWORD in Streamlit Settings → Secrets before using this app.")
+    st.caption("Do not expose a public app that can use your private API keys without access control.")
+    st.stop()
+
+if not st.session_state.get("promptlab_authenticated", False):
+    st.title("PromptLab")
+    attempts = int(st.session_state.get("promptlab_login_attempts", 0))
+    if attempts >= 5:
+        st.error("Too many incorrect attempts in this session. Start a new session or contact the app owner.")
+        st.stop()
+    with st.form("promptlab_login"):
+        entered_password = st.text_input("App access password", type="password")
+        submitted = st.form_submit_button("Unlock PromptLab", type="primary")
+    if submitted:
+        if hmac.compare_digest(entered_password, access_password):
+            st.session_state["promptlab_authenticated"] = True
+            st.session_state["promptlab_login_attempts"] = 0
+            st.rerun()
+        else:
+            st.session_state["promptlab_login_attempts"] = attempts + 1
+            st.error("Incorrect password.")
+    st.stop()
+
+st.title("🧪 PromptLab")
+st.caption("Automatic Groq + Ollama comparison across prompt-engineering techniques for code generation.")
+
+# Provider IDs and endpoints are fixed server-side; users cannot edit them in the UI.
 GROQ_MODEL = secret_or_env("GROQ_MODEL", "openai/gpt-oss-20b")
-GEMINI_MODEL = secret_or_env("GEMINI_MODEL", "gemini-3.8-flash")
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-
+OLLAMA_MODEL = secret_or_env("OLLAMA_MODEL", "gpt-oss:20b-cloud")
+OLLAMA_BASE_URL = secret_or_env("OLLAMA_BASE_URL", "https://ollama.com/v1").rstrip("/")
 groq_key = secret_or_env("GROQ_API_KEY")
-gemini_key = secret_or_env("GEMINI_API_KEY")
+ollama_url = urlparse(OLLAMA_BASE_URL)
+ollama_is_loopback = ollama_url.scheme == "http" and ollama_url.hostname in {"localhost", "127.0.0.1", "::1"}
+ollama_url_valid = bool(ollama_url.hostname) and (ollama_url.scheme == "https" or ollama_is_loopback)
+ollama_key = secret_or_env("OLLAMA_API_KEY", "ollama" if ollama_is_loopback else "")
 
-EXEC_MODES = {
-    "AI estimate via Groq (does not execute code)": "ai",
-    "Auto (Docker if available, else local Python)": "auto",
-    "Local Python (subprocess)": "local",
-    "Docker sandbox": "docker",
-}
+try:
+    RUNS_PER_HOUR = max(1, min(int(secret_or_env("PROMPTLAB_MAX_RUNS_PER_HOUR", "6")), 30))
+except ValueError:
+    RUNS_PER_HOUR = 6
+
+docker_opt_in = secret_or_env("PROMPTLAB_ENABLE_DOCKER_EXECUTION", "false").strip().lower() == "true"
+docker_ready = docker_opt_in and docker_available()
+EXEC_MODES = {"AI estimate by Groq (does not execute code)": "ai"}
+if docker_ready:
+    EXEC_MODES["Docker sandbox (admin enabled)"] = "docker"
+
+
+
+def safe_csv(frame: pd.DataFrame) -> str:
+    """Escape formula-like text cells before users open exported CSV files in spreadsheet software."""
+    safe = frame.copy()
+    for column in safe.select_dtypes(include=["object", "string"]).columns:
+        safe[column] = safe[column].map(
+            lambda value: "'" + value
+            if isinstance(value, str) and value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@"))
+            else value
+        )
+    return safe.to_csv(index=False)
+
+def redact_error(value: object) -> str:
+    message = str(value)
+    for secret in (groq_key, ollama_key, access_password):
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    return message[:700]
 
 with st.sidebar:
-    st.header("Connected AI models")
-    if groq_key:
-        st.success("Groq API key configured")
-    else:
-        st.error("Missing GROQ_API_KEY")
-    if gemini_key:
-        st.success("Gemini API key configured")
-    else:
-        st.error("Missing GEMINI_API_KEY")
-    st.caption("Both models are called automatically. API keys are never displayed.")
+    st.header("Connected models")
+    st.success("Groq configured" if groq_key else "Missing GROQ_API_KEY")
+    st.success("Ollama configured" if ollama_key else "Missing OLLAMA_API_KEY")
+    st.caption("Both models run automatically. API keys are never displayed.")
+    st.caption(f"Groq model: {GROQ_MODEL}")
+    st.caption(f"Ollama model: {OLLAMA_MODEL}")
     st.header("Experiment settings")
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     exec_label = st.selectbox(
         "Test evaluator",
         list(EXEC_MODES),
         index=0,
-        help="AI estimate is the cloud-friendly default. Docker/local modes actually execute Python; local subprocess is not a security sandbox.",
+        help="AI estimate is the safe hosted default. Actual execution is available only in Docker when enabled by the app owner.",
     )
     exec_mode = EXEC_MODES[exec_label]
-    trials = st.slider("Trials per technique per model", 1, 5, 1, help="Each trial calls both models for each selected technique.")
-    priority = st.selectbox("Best-response scoring", list(WEIGHT_PRESETS), help="Weights: accuracy / generation time / tokens / execution time")
-    st.caption("Docker detected." if docker_available() else "Docker not detected. AI estimate is recommended for the hosted app.")
+    trials = st.slider("Trials per technique per model", 1, 3, 1)
+    priority = st.selectbox("Best-response scoring", list(WEIGHT_PRESETS))
+    st.caption(f"Quota: up to {RUNS_PER_HOUR} comparisons per rolling hour on this app instance.")
+    if not docker_ready:
+        st.caption("Docker execution is disabled; host-local Python execution is not offered in the web UI.")
+    if st.button("Lock this session"):
+        st.session_state["promptlab_authenticated"] = False
+        st.session_state.pop("last_run", None)
+        st.rerun()
 
 
 def evaluator():
@@ -81,9 +135,9 @@ def evaluator():
 
 llms = {
     "Groq": make_llm("Groq", groq_key, GROQ_MODEL, temperature),
-    "Gemini": make_llm("Custom OpenAI-compatible", gemini_key, GEMINI_MODEL, temperature, GEMINI_BASE_URL),
+    "Ollama": make_llm("Custom OpenAI-compatible", ollama_key, OLLAMA_MODEL, temperature, OLLAMA_BASE_URL),
 }
-model_names = {"Groq": GROQ_MODEL, "Gemini": GEMINI_MODEL}
+model_names = {"Groq": GROQ_MODEL, "Ollama": OLLAMA_MODEL}
 
 tab_run, tab_history, tab_method = st.tabs(["⚡ Prompt Lab", "History & analysis", "Research protocol"])
 
@@ -93,26 +147,36 @@ with tab_run:
     if source == "One-line request":
         request = st.text_input(
             "Describe the code you want in one line",
-            placeholder="e.g. find the second largest number in a list without sorting",
+            placeholder="e.g. find the second largest number in a list without sorting", max_chars=500,
         )
     else:
         preset = st.selectbox("Benchmark task", list(PRESET_TASKS))
     selected = st.multiselect("Prompt techniques", [t.name for t in TECHNIQUES], default=[t.name for t in TECHNIQUES])
-    ready = bool(groq_key and gemini_key and selected and (request.strip() or source != "One-line request"))
-    if not groq_key or not gemini_key:
-        st.info("Add both GROQ_API_KEY and GEMINI_API_KEY in Streamlit Settings → Secrets. The keys stay hidden.")
-    go = st.button("Run Groq + Gemini comparison", type="primary", disabled=not ready)
+    ready = bool(groq_key and ollama_key and ollama_url_valid and selected and (request.strip() or source != "One-line request"))
+    if not groq_key or not ollama_key:
+        st.info("Add both GROQ_API_KEY and OLLAMA_API_KEY in Streamlit Settings → Secrets. The keys stay hidden.")
+    if not ollama_url_valid:
+        st.error("OLLAMA_BASE_URL must use HTTPS. HTTP is allowed only for a localhost Ollama server in local development.")
+    go = st.button("Run Groq + Ollama comparison", type="primary", disabled=not ready)
+    if go:
+        try:
+            allowed, _remaining = reserve_usage_slot(RUNS_PER_HOUR)
+        except Exception:
+            allowed = False
+        if not allowed:
+            st.error(f"Hourly app quota reached or unavailable ({RUNS_PER_HOUR} comparisons per rolling hour). Run blocked for safety.")
+            go = False
 
     if go:
         keys = [t.key for t in TECHNIQUES if t.name in selected]
         evaluate = evaluator()
         try:
             with st.status("Step 1: creating one shared task specification...", expanded=False) as status:
-                # One shared specification/test suite keeps the Groq-vs-Gemini comparison fair.
+                # One shared specification/test suite keeps the Groq-vs-Ollama comparison fair.
                 # The request is then included in every technique prompt sent to both models.
                 spec = expand_request(request, llms["Groq"]) if source == "One-line request" else spec_from_preset(preset)
                 status.update(label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests", state="complete")
-            progress = st.progress(0.0, text="Running every selected technique on Groq and Gemini...")
+            progress = st.progress(0.0, text="Running every selected technique on Groq and Ollama...")
             records = run_all(
                 spec,
                 keys,
@@ -134,13 +198,15 @@ with tab_run:
                     "model": rec.get("model") or model_names.get(rec["provider"], ""),
                     "score": score_by_key.get(rec["comparison_key"]),
                 })
+                if rec.get("error_message"):
+                    rec["error_message"] = redact_error(rec["error_message"])
                 save_experiment(dict(rec))
             st.session_state["last_run"] = {
                 "spec": spec, "records": records, "rows": rows, "picked": picked, "priority": priority,
                 "exec_mode": exec_mode,
             }
         except Exception as exc:
-            st.error(f"{type(exc).__name__}: {exc}")
+            st.error(f"Comparison failed: {redact_error(type(exc).__name__ + ': ' + str(exc))}")
 
     run = st.session_state.get("last_run")
     if run:
@@ -159,7 +225,7 @@ with tab_run:
             st.warning(f"{suspects} generated test(s) were failed by every variant and treated as suspect; excluded from adjusted accuracy.")
 
         st.subheader("2. Same prompts sent to both models")
-        st.caption("Each selected technique runs on both Groq and Gemini with the same specification, examples and hidden test cases.")
+        st.caption("Each selected technique runs on both Groq and Ollama with the same specification, examples and hidden test cases.")
         for t in TECHNIQUES:
             if any(r["technique_key"] == t.key for r in records):
                 with st.expander(f"{t.name}: {t.description}"):
@@ -169,7 +235,7 @@ with tab_run:
                         language="text",
                     )
 
-        st.subheader("3. Groq vs Gemini: all results")
+        st.subheader("3. Groq vs Ollama: all results")
         table = pd.DataFrame([{
             "Rank": row["rank"],
             "Provider": row["provider"],
@@ -181,11 +247,15 @@ with tab_run:
             "Execution time (ms)": None if row["exec_ms"] is None else round(row["exec_ms"], 4),
             "Score": row["score"],
         } for row in rows])
+        table["Provider / Technique"] = table["Provider"] + " · " + table["Technique"]
         st.dataframe(table, width="stretch", hide_index=True)
         ch1, ch2, ch3 = st.columns(3)
-        ch1.caption("Accuracy %"); ch1.bar_chart(table.set_index(["Provider", "Technique"])["Accuracy %"])
-        ch2.caption("Generation time (s)"); ch2.bar_chart(table.set_index(["Provider", "Technique"])["Generation time (s)"])
-        ch3.caption("Tokens used"); ch3.bar_chart(table.set_index(["Provider", "Technique"])["Tokens"])
+        ch1.caption("Accuracy %")
+        ch1.bar_chart(table.set_index("Provider / Technique")["Accuracy %"])
+        ch2.caption("Generation time (s)")
+        ch2.bar_chart(table.set_index("Provider / Technique")["Generation time (s)"])
+        ch3.caption("Tokens used")
+        ch3.bar_chart(table.set_index("Provider / Technique")["Tokens"])
 
         for rec in records:
             label = f"{rec['provider']} · {rec['technique_name']} (trial {rec['trial']}): {rec['status']} {rec['passed_tests']}/{rec['total_tests']}"
@@ -224,7 +294,7 @@ with tab_run:
             outputs = show_outputs(best["generated_code"], spec, evaluator(), extra_args=extra)
             st.write("AI-estimated output" if run["exec_mode"] == "ai" else "Observed output")
             if run["exec_mode"] == "ai":
-                st.caption("These outputs are model estimates, not results from executing Python.")
+                st.caption("These outputs are Groq estimates, not results from executing Python.")
             st.dataframe(pd.DataFrame(outputs), width="stretch", hide_index=True)
             st.download_button(
                 "Download this comparison as JSON",
@@ -264,7 +334,7 @@ with tab_history:
         st.dataframe(df[cols], width="stretch", hide_index=True)
         st.download_button(
             "Download history as CSV",
-            df.drop(columns=["test_results"], errors="ignore").to_csv(index=False),
+            safe_csv(df.drop(columns=["test_results"], errors="ignore")),
             "promptlab_experiments.csv", "text/csv",
         )
         with st.expander("View saved prompt or code"):
@@ -281,8 +351,8 @@ with tab_method:
     st.markdown("""
 ### Pipeline
 1. **Task specification.** For a one-line request, Groq creates one shared function specification, examples and hidden tests so both coding models face the same benchmark.
-2. **Dual generation.** Every selected prompt-engineering technique is sent to both Groq and Gemini automatically. No model selector is shown.
-3. **Evaluation.** AI-estimate mode predicts outcomes using Groq without executing code. Docker/local modes actually execute code; local subprocess is not a strong security sandbox.
+2. **Dual generation.** Every selected prompt-engineering technique is sent to both Groq and Ollama automatically. No model selector is shown.
+3. **Evaluation.** AI-estimate mode predicts outcomes using Groq without executing code. Actual execution is only available through an administrator-enabled Docker sandbox; host-local Python execution is disabled in the web UI.
 4. **Comparison.** PromptLab compares accuracy, solved rate, generation latency, token usage and (where measured) execution time across provider × technique pairs.
 5. **Ranking.** Score = 100 x (wA*accuracy + wL*speed + wT*token_efficiency + wE*run_efficiency). Default weights are 0.70 / 0.10 / 0.10 / 0.10.
 6. **Output.** All model/technique outputs remain visible. The highest-ranked pair is shown with its prompt, code and example/custom outputs.
