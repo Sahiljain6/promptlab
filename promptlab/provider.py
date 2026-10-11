@@ -38,8 +38,6 @@ def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
     provider = provider.strip()
     if provider == "Groq":
         base_url = "https://api.groq.com/openai/v1"
-    elif provider == "Gemini":
-        base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
     elif provider == "OpenAI":
         base_url = None
     else:

@@ -171,10 +171,10 @@ class PipelineTests(unittest.TestCase):
 
     def test_dual_model_run_compares_provider_and_technique_pairs(self):
         spec = expand_request("check prime", fake_llm)
-        clients = {"Groq": fake_llm, "Gemini": fake_llm}
+        clients = {"Groq": fake_llm, "Ollama": fake_llm}
         records = run_all(spec, ["zero_shot", "function_signature"], clients, local_eval, workers=4)
         self.assertEqual(len(records), 4)
-        self.assertEqual({r["provider"] for r in records}, {"Groq", "Gemini"})
+        self.assertEqual({r["provider"] for r in records}, {"Groq", "Ollama"})
         rows = summarize(records, WEIGHT_PRESETS["Accuracy first"])
         self.assertEqual(len(rows), 4)
         top, best = pick_best(rows, records)

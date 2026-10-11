@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+from urllib.parse import urlparse
 
 import pandas as pd
 import streamlit as st
@@ -51,14 +52,17 @@ if not st.session_state.get("promptlab_authenticated", False):
     st.stop()
 
 st.title("🧪 PromptLab")
-st.caption("Automatic Groq + Gemini comparison across prompt-engineering techniques for code generation.")
+st.caption("Automatic Groq + Ollama comparison across prompt-engineering techniques for code generation.")
 
 # Provider IDs and endpoints are fixed server-side; users cannot edit them in the UI.
 GROQ_MODEL = secret_or_env("GROQ_MODEL", "openai/gpt-oss-20b")
-GEMINI_MODEL = secret_or_env("GEMINI_MODEL", "gemini-3.8-flash")
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OLLAMA_MODEL = secret_or_env("OLLAMA_MODEL", "gpt-oss:20b-cloud")
+OLLAMA_BASE_URL = secret_or_env("OLLAMA_BASE_URL", "https://ollama.com/v1").rstrip("/")
 groq_key = secret_or_env("GROQ_API_KEY")
-gemini_key = secret_or_env("GEMINI_API_KEY")
+ollama_url = urlparse(OLLAMA_BASE_URL)
+ollama_is_loopback = ollama_url.scheme == "http" and ollama_url.hostname in {"localhost", "127.0.0.1", "::1"}
+ollama_url_valid = bool(ollama_url.hostname) and (ollama_url.scheme == "https" or ollama_is_loopback)
+ollama_key = secret_or_env("OLLAMA_API_KEY", "ollama" if ollama_is_loopback else "")
 
 try:
     RUNS_PER_HOUR = max(1, min(int(secret_or_env("PROMPTLAB_MAX_RUNS_PER_HOUR", "6")), 30))
@@ -86,7 +90,7 @@ def safe_csv(frame: pd.DataFrame) -> str:
 
 def redact_error(value: object) -> str:
     message = str(value)
-    for secret in (groq_key, gemini_key, access_password):
+    for secret in (groq_key, ollama_key, access_password):
         if secret:
             message = message.replace(secret, "[REDACTED]")
     return message[:700]
@@ -94,10 +98,10 @@ def redact_error(value: object) -> str:
 with st.sidebar:
     st.header("Connected models")
     st.success("Groq configured" if groq_key else "Missing GROQ_API_KEY")
-    st.success("Gemini configured" if gemini_key else "Missing GEMINI_API_KEY")
+    st.success("Ollama configured" if ollama_key else "Missing OLLAMA_API_KEY")
     st.caption("Both models run automatically. API keys are never displayed.")
     st.caption(f"Groq model: {GROQ_MODEL}")
-    st.caption(f"Gemini model: {GEMINI_MODEL}")
+    st.caption(f"Ollama model: {OLLAMA_MODEL}")
     st.header("Experiment settings")
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     exec_label = st.selectbox(
@@ -131,9 +135,9 @@ def evaluator():
 
 llms = {
     "Groq": make_llm("Groq", groq_key, GROQ_MODEL, temperature),
-    "Gemini": make_llm("Gemini", gemini_key, GEMINI_MODEL, temperature, GEMINI_BASE_URL),
+    "Ollama": make_llm("Custom OpenAI-compatible", ollama_key, OLLAMA_MODEL, temperature, OLLAMA_BASE_URL),
 }
-model_names = {"Groq": GROQ_MODEL, "Gemini": GEMINI_MODEL}
+model_names = {"Groq": GROQ_MODEL, "Ollama": OLLAMA_MODEL}
 
 tab_run, tab_history, tab_method = st.tabs(["⚡ Prompt Lab", "History & analysis", "Research protocol"])
 
@@ -148,10 +152,12 @@ with tab_run:
     else:
         preset = st.selectbox("Benchmark task", list(PRESET_TASKS))
     selected = st.multiselect("Prompt techniques", [t.name for t in TECHNIQUES], default=[t.name for t in TECHNIQUES])
-    ready = bool(groq_key and gemini_key and selected and (request.strip() or source != "One-line request"))
-    if not groq_key or not gemini_key:
-        st.info("Add both GROQ_API_KEY and GEMINI_API_KEY in Streamlit Settings → Secrets. The keys stay hidden.")
-    go = st.button("Run Groq + Gemini comparison", type="primary", disabled=not ready)
+    ready = bool(groq_key and ollama_key and ollama_url_valid and selected and (request.strip() or source != "One-line request"))
+    if not groq_key or not ollama_key:
+        st.info("Add both GROQ_API_KEY and OLLAMA_API_KEY in Streamlit Settings → Secrets. The keys stay hidden.")
+    if not ollama_url_valid:
+        st.error("OLLAMA_BASE_URL must use HTTPS. HTTP is allowed only for a localhost Ollama server in local development.")
+    go = st.button("Run Groq + Ollama comparison", type="primary", disabled=not ready)
     if go:
         try:
             allowed, _remaining = reserve_usage_slot(RUNS_PER_HOUR)
@@ -175,19 +181,19 @@ with tab_run:
                         spec = expand_request(request, llms["Groq"])
                     except Exception as groq_exc:
                         status.update(
-                            label="Groq could not build a valid task specification; retrying with Gemini...",
+                            label="Groq could not build a valid task specification; retrying with Ollama...",
                             state="running",
                         )
                         try:
-                            spec = expand_request(request, llms["Gemini"])
-                            spec_source = "Gemini fallback"
-                        except Exception as gemini_exc:
+                            spec = expand_request(request, llms["Ollama"])
+                            spec_source = "Ollama fallback"
+                        except Exception as ollama_exc:
                             raise RuntimeError(
                                 "Task specification generation failed on both providers. "
                                 f"Groq: {type(groq_exc).__name__}: {str(groq_exc)[:220]}; "
-                                f"Gemini: {type(gemini_exc).__name__}: {str(gemini_exc)[:220]}. "
+                                f"Ollama: {type(ollama_exc).__name__}: {str(ollama_exc)[:220]}. "
                                 "Check API credentials, model access, and retry."
-                            ) from gemini_exc
+                            ) from ollama_exc
                 else:
                     spec = spec_from_preset(preset)
                     spec_source = "Built-in preset"
@@ -195,7 +201,7 @@ with tab_run:
                     label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests · {spec_source}",
                     state="complete",
                 )
-            progress = st.progress(0.0, text="Running every selected technique on Groq and Gemini...")
+            progress = st.progress(0.0, text="Running every selected technique on Groq and Ollama...")
             records = run_all(
                 spec,
                 keys,
@@ -245,7 +251,7 @@ with tab_run:
             st.warning(f"{suspects} generated test(s) were failed by every variant and treated as suspect; excluded from adjusted accuracy.")
 
         st.subheader("2. Same prompts sent to both models")
-        st.caption("Each selected technique runs on both Groq and Gemini with the same specification, examples and hidden test cases.")
+        st.caption("Each selected technique runs on both Groq and Ollama with the same specification, examples and hidden test cases.")
         for t in TECHNIQUES:
             if any(r["technique_key"] == t.key for r in records):
                 with st.expander(f"{t.name}: {t.description}"):
@@ -255,7 +261,7 @@ with tab_run:
                         language="text",
                     )
 
-        st.subheader("3. Groq vs Gemini: all results")
+        st.subheader("3. Groq vs Ollama: all results")
         table = pd.DataFrame([{
             "Rank": row["rank"],
             "Provider": row["provider"],
@@ -373,7 +379,7 @@ with tab_method:
     st.markdown("""
 ### Pipeline
 1. **Task specification.** For a one-line request, Groq creates one shared function specification, examples and hidden tests so both coding models face the same benchmark.
-2. **Dual generation.** Every selected prompt-engineering technique is sent to both Groq and Gemini automatically. No model selector is shown.
+2. **Dual generation.** Every selected prompt-engineering technique is sent to both Groq and Ollama automatically. No model selector is shown.
 3. **Evaluation.** AI-estimate mode predicts outcomes using Groq without executing code. Actual execution is only available through an administrator-enabled Docker sandbox; host-local Python execution is disabled in the web UI.
 4. **Comparison.** PromptLab compares accuracy, solved rate, generation latency, token usage and (where measured) execution time across provider × technique pairs.
 5. **Ranking.** Score = 100 x (wA*accuracy + wL*speed + wT*token_efficiency + wE*run_efficiency). Default weights are 0.70 / 0.10 / 0.10 / 0.10.
