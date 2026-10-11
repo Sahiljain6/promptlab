@@ -16,24 +16,43 @@ load_dotenv()
 st.set_page_config(page_title="PromptLab", page_icon="🧪", layout="wide")
 st.title("🧪 PromptLab")
 st.caption("A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs")
-st.markdown("Compare prompt strategies using real model-generated Python code and automated ground-truth tests. API calls require your own provider key.")
+st.markdown("Compare prompt strategies using model-generated Python code and automated ground-truth tests. Provider credentials are loaded from server-side secrets and are not displayed in the interface.")
+
+def secret_or_env(name: str, default: str = "") -> str:
+    """Read credentials from Streamlit Secrets first, then local environment variables."""
+    try:
+        value = st.secrets.get(name, os.getenv(name, default))
+    except Exception:
+        value = os.getenv(name, default)
+    return str(value or "")
+
 
 with st.sidebar:
     st.header("Model configuration")
     provider = st.selectbox("Provider", ["Groq", "OpenAI", "Custom OpenAI-compatible"])
     if provider == "Groq":
-        key_default, model_default, base_url = os.getenv("GROQ_API_KEY", ""), "openai/gpt-oss-20b", "https://api.groq.com/openai/v1"
+        api_key = secret_or_env("GROQ_API_KEY")
+        model_default, base_url = "openai/gpt-oss-20b", "https://api.groq.com/openai/v1"
+        secret_name = "GROQ_API_KEY"
     elif provider == "OpenAI":
-        key_default, model_default, base_url = os.getenv("OPENAI_API_KEY", ""), "gpt-4o-mini", ""
+        api_key = secret_or_env("OPENAI_API_KEY")
+        model_default, base_url = "gpt-4o-mini", ""
+        secret_name = "OPENAI_API_KEY"
     else:
-        key_default, model_default = os.getenv("PROMPTLAB_API_KEY", ""), os.getenv("PROMPTLAB_MODEL", "")
-        base_url = st.text_input("API base URL", value=os.getenv("PROMPTLAB_BASE_URL", ""))
-    api_key = st.text_input("API key", value=key_default, type="password", help="Used for this session; do not share it.")
+        api_key = secret_or_env("PROMPTLAB_API_KEY")
+        model_default = secret_or_env("PROMPTLAB_MODEL")
+        base_url = st.text_input("API base URL", value=secret_or_env("PROMPTLAB_BASE_URL"))
+        secret_name = "PROMPTLAB_API_KEY"
     model = st.text_input("Model ID", value=model_default)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
+    if not api_key:
+        st.warning(f"Provider key is not configured. Add {secret_name} under Streamlit app Settings → Secrets, or set it in your local .env file.")
     st.divider()
-    judge0_api_key = st.text_input("Judge0 RapidAPI key (cloud sandbox)", value="", type="password", help="Optional for cloud deployment. A key enables remote isolated execution; it is used for this session only.")
-    st.caption("Cloud: enter a Judge0 RapidAPI key to run tests in a separate sandbox. Local fallback: Docker Desktop.")
+    judge0_api_key = secret_or_env("JUDGE0_API_KEY")
+    if judge0_api_key:
+        st.caption("Cloud sandbox credentials: configured. The key is stored server-side and is not shown.")
+    else:
+        st.caption("Cloud sandbox credentials: not configured. Add JUDGE0_API_KEY under Streamlit app Settings → Secrets. Local runs can use Docker Desktop.")
 
 tab_run, tab_history, tab_method = st.tabs(["Run experiment", "History & analysis", "Research protocol"])
 
