@@ -56,11 +56,11 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 
 7. Open the local URL printed in the terminal, usually http://localhost:8501.
 
-You can also enter the LLM provider API key and Judge0 RapidAPI key in the app sidebar for the current session. Keys are not stored in the experiment database.
+Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database.
 
 ## Provider configuration
 
-The default provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in `.env` or paste it into the sidebar. OpenAI and other compatible endpoints are also supported.
+The default provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in local `.env` or in Streamlit Cloud app Settings → Secrets. OpenAI and other compatible endpoints are also supported. Use `OPENAI_API_KEY` for OpenAI, or `PROMPTLAB_API_KEY`, `PROMPTLAB_BASE_URL`, and optionally `PROMPTLAB_MODEL` for a compatible endpoint. Configure `JUDGE0_API_KEY` to enable the hosted sandbox.
 
 ## Run unit tests
 
@@ -90,7 +90,7 @@ API errors and runs not tested because Docker is unavailable should not be treat
 
 ## Safety notes
 
-Generated code is untrusted. Cloud execution can use Judge0 CE through its hosted API, which provides sandboxed execution with configurable time and memory limits. Local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
+Generated code is untrusted. Cloud execution can use Judge0 CE through its hosted API, which provides sandboxed execution with configurable time and memory limits. Local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
 
 ## Research limitations
 
