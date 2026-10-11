@@ -73,6 +73,9 @@ def run_technique(technique_key: str, spec: TaskSpec, llm: LLM, evaluate: Evalua
     try:
         system, max_tokens = system_for(technique_key), max_tokens_for(technique_key)
         gen = llm(prompt, system=system, max_tokens=max_tokens)
+        generated_text = getattr(gen, "text", None)
+        if not isinstance(generated_text, str) or not generated_text.strip():
+            raise RuntimeError("Provider returned empty generation content.")
         latency, (p_tok, c_tok) = gen.latency_seconds, _tokens(gen, prompt)
         record["model"] = getattr(gen, "model", None)
         code = clean_generated_code(gen.text, spec.function_name)
@@ -83,6 +86,9 @@ def run_technique(technique_key: str, spec: TaskSpec, llm: LLM, evaluate: Evalua
                     break
                 repair = build_repair_prompt(prompt, code, _feedback(check, spec.examples))
                 gen = llm(repair, system=system, max_tokens=max_tokens)
+                generated_text = getattr(gen, "text", None)
+                if not isinstance(generated_text, str) or not generated_text.strip():
+                    raise RuntimeError("Provider returned empty generation content during repair.")
                 latency += gen.latency_seconds
                 extra_p, extra_c = _tokens(gen, repair)
                 p_tok, c_tok = p_tok + extra_p, c_tok + extra_c
@@ -102,11 +108,14 @@ def run_technique(technique_key: str, spec: TaskSpec, llm: LLM, evaluate: Evalua
 
 
 def run_all(spec: TaskSpec, technique_keys: list[str], llm: LLM | dict[str, LLM], evaluate: Evaluator, trials: int = 1,
-            workers: int = 4, on_progress: Callable[[int, int, dict], None] | None = None) -> list[dict[str, Any]]:
+            workers: int = 4, on_progress: Callable[[int, int, dict], None] | None = None,
+            fallback_llm: LLM | None = None,
+            fallback_provider_name: str = "Gemini (fallback)") -> list[dict[str, Any]]:
     """Run every selected technique against one or more models using the same task and tests.
 
-    A single LLM preserves the original API; a mapping such as {"Groq": groq_client, "Gemini": gemini_client}
-    creates one trial for every provider × technique pair.
+    A single LLM preserves the original API; a mapping creates provider × technique pairs.
+    An optional fallback client is contacted only when every primary provider reports an API error
+    for the same technique and trial. It is not added to normal comparison runs.
     """
     order = {t.key: i for i, t in enumerate(TECHNIQUES)}
     llms = llm if isinstance(llm, dict) else {"Model": llm}
@@ -114,6 +123,9 @@ def run_all(spec: TaskSpec, technique_keys: list[str], llm: LLM | dict[str, LLM]
             for provider, client in llms.items()
             for key in technique_keys
             for trial in range(1, trials + 1)]
+    possible_fallbacks = len(technique_keys) * trials if fallback_llm is not None and len(llms) >= 2 else 0
+    progress_total = len(jobs) + possible_fallbacks
+    progress_done = 0
     records: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {
@@ -125,9 +137,36 @@ def run_all(spec: TaskSpec, technique_keys: list[str], llm: LLM | dict[str, LLM]
             record["provider"] = futures[future]
             record["comparison_key"] = f"{record['provider']}::{record['technique_key']}"
             records.append(record)
+            progress_done = done
             if on_progress:
-                on_progress(done, len(jobs), record)
+                on_progress(done, progress_total, record)
+
+    # Keep the backup idle unless both primary providers fail to return usable API responses
+    # for the same prompt technique and trial. The one successful primary result is not replaced.
+    if fallback_llm is not None and len(llms) >= 2:
+        primary_records = list(records)
+        for key in technique_keys:
+            for trial in range(1, trials + 1):
+                pair = [
+                    record for record in primary_records
+                    if record["technique_key"] == key and record["trial"] == trial
+                ]
+                if len(pair) != len(llms) or not all(record["status"] == "API ERROR" for record in pair):
+                    continue
+                fallback_record = run_technique(key, spec, fallback_llm, evaluate, trial)
+                fallback_record["provider"] = fallback_provider_name
+                fallback_record["comparison_key"] = f"{fallback_provider_name}::{key}"
+                records.append(fallback_record)
+                progress_done += 1
+                if on_progress:
+                    on_progress(progress_done, progress_total, fallback_record)
+
+    if on_progress and records and progress_done < progress_total:
+        on_progress(progress_total, progress_total, records[-1])
+
     provider_order = {name: index for index, name in enumerate(llms)}
+    if fallback_llm is not None:
+        provider_order[fallback_provider_name] = len(provider_order)
     records.sort(key=lambda r: (provider_order.get(r["provider"], 99), order[r["technique_key"]], r["trial"]))
     annotate(records, flag_suspect_tests(records))
     run_id = uuid.uuid4().hex[:10]
