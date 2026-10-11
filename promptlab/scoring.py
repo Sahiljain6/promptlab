@@ -10,7 +10,7 @@ WEIGHT_PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Balanced": (0.50, 0.20, 0.15, 0.15),
     "Speed & cost first": (0.30, 0.30, 0.25, 0.15),
 }
-EXECUTED = {"PASSED", "FAILED", "AI PASS", "AI FAIL"}
+EXECUTED = {"PASSED", "FAILED"}
 LATENCY_EPS_S = 0.05     # floors so tiny absolute differences do not dominate the ratio
 EXEC_EPS_MS = 0.05
 
@@ -65,8 +65,10 @@ def summarize(records: list[dict[str, Any]], weights: tuple[float, float, float,
             "technique": display,
             "technique_name": items[0]["technique_name"],
             "trials": len(items),
-            "accuracy": mean(r["adj_rate"] for r in items) if items else 0.0,
-            "solved_rate": mean(1.0 if r["solved"] else 0.0 for r in items),
+            "valid_trials": len(ok),
+            # API errors and NOT TESTED trials are missing observations, not incorrect solutions.
+            "accuracy": mean(r["adj_rate"] for r in ok) if ok else 0.0,
+            "solved_rate": mean(1.0 if r["solved"] else 0.0 for r in ok) if ok else 0.0,
             "gen_latency_s": mean(r["latency_seconds"] for r in ok if r.get("latency_seconds") is not None) if any(r.get("latency_seconds") is not None for r in ok) else None,
             "tokens": mean((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0) for r in ok) if ok else None,
             "exec_ms": mean(times) if times else None,
@@ -81,7 +83,10 @@ def summarize(records: list[dict[str, Any]], weights: tuple[float, float, float,
         exe = _norm_low(row["exec_ms"], best_exec, EXEC_EPS_MS)
         if row["exec_ms"] is None and best_exec is None:
             exe = 1.0      # nobody reported execution time (AI-estimate mode): neutral
-        row["score"] = round(100 * (w_acc * row["accuracy"] + w_lat * lat + w_tok * tok + w_exec * exe), 2)
+        row["score"] = (
+            round(100 * (w_acc * row["accuracy"] + w_lat * lat + w_tok * tok + w_exec * exe), 2)
+            if row["valid_trials"] else 0.0
+        )
     rows.sort(key=lambda r: (-r["score"], r["tokens"] or 1e9))
     for rank, row in enumerate(rows, 1):
         row["rank"] = rank
