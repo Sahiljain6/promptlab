@@ -77,7 +77,7 @@ python -m unittest discover -s tests -v
 2. Confirm the function signature and expected test cases.
 3. Keep model, temperature, task, and test cases the same when comparing prompting techniques.
 4. Select techniques and click **Run experiment**.
-5. Inspect the generated code and actual test outcomes.
+5. Inspect the generated code and test estimates. Cloud results are AI predictions; local Docker results are actual runtime outcomes.
 6. Use History & analysis to compare saved runs and export a CSV.
 
 Ground-truth test cases are not included in the code-generation prompt. The separate Groq reviewer receives the candidate code and test cases to estimate outcomes; it does not execute the code.
