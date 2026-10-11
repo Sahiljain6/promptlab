@@ -15,7 +15,7 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 ## Requirements
 
 - Python 3.10 or newer (Python 3.11 or 3.12 recommended)
-- Docker Desktop installed and running for test execution
+- For cloud test execution: a Judge0 RapidAPI key (create one through the Judge0 CE listing on RapidAPI). For local fallback: Docker Desktop installed and running
 - API key for the selected model provider
 
 ## Windows setup
@@ -56,7 +56,7 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 
 7. Open the local URL printed in the terminal, usually http://localhost:8501.
 
-You can also enter an API key in the app sidebar for the current session. Keys are not stored in the experiment database.
+You can also enter the LLM provider API key and Judge0 RapidAPI key in the app sidebar for the current session. Keys are not stored in the experiment database.
 
 ## Provider configuration
 
@@ -90,7 +90,7 @@ API errors and runs not tested because Docker is unavailable should not be treat
 
 ## Safety notes
 
-Generated code is untrusted. The evaluator runs code in Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. This reduces risk but is not a guarantee of perfect isolation. Keep Docker updated and run the app locally. Do not expose this development executor as a public service without a hardened remote sandbox, authentication, rate limiting, secret management, and a security review.
+Generated code is untrusted. Cloud execution can use Judge0 CE through its hosted API, which provides sandboxed execution with configurable time and memory limits. Local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
 
 ## Research limitations
 
