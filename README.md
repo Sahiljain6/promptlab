@@ -2,21 +2,38 @@
 
 PromptLab is a Streamlit web application for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It calls a real LLM API, compares five prompt templates, evaluates generated Python functions, and stores experiment results in SQLite for analysis and CSV export.
 
-## Features
+## What it does
 
-- Streamlit browser interface
-- Real inference using Groq, OpenAI, or a custom OpenAI-compatible endpoint
-- Five techniques: zero-shot, few-shot, persona-based, structured specification, and stepwise planning
-- Preset tasks plus custom task and test-case editor
-- Cloud AI review through the Groq API (predicts likely test outcomes by code inspection; it does not execute Python)
-- Optional local Docker test execution with network disabled, resource limits, read-only work mount, non-root user, and timeout
-- Correctness, test pass rate, model latency, and token usage when reported by the provider
-- SQLite history, aggregate charts, and CSV export
+Type **one line** (for example *"find the second largest number in a list without sorting"*) and PromptLab will:
+
+1. Turn it into a function specification (name, typed signature, description, 2 visible examples) plus 8-10 hidden tests.
+2. Build the prompt for **10 techniques**: zero-shot, few-shot, persona, function signature + docstring, structured specification, private planning, chain-of-thought, structured CoT, decomposition and self-repair (generate, run on examples, repair).
+3. Send every prompt to the same model and **really execute** the returned code (Docker if available, otherwise a local subprocess with timeouts).
+4. Report per technique: accuracy, solved rate, generation time, tokens, and code run time, with charts.
+5. Rank the techniques with a weighted score and show the **best prompt, its code and its real output**, with a box to try your own input.
+
+Other features: preset benchmark tasks with hand-written tests, repeat trials, suspect-test detection (tests that every technique fails are excluded from accuracy), SQLite history, CSV and JSON export, optional Groq AI-estimate mode (clearly labelled, does not execute code).
+
+## Project structure
+
+| File | Role |
+|---|---|
+| `app.py` | Streamlit interface |
+| `promptlab/prompts.py` | The 10 technique templates and code extraction |
+| `promptlab/tasks.py` | One-line request to specification and tests; preset tasks |
+| `promptlab/pipeline.py` | Concurrent runs, self-repair loop, output demo |
+| `promptlab/sandbox.py` | Docker / local / AI-estimate executors with timing |
+| `promptlab/scoring.py` | Suspect-test filter, per-technique summary, composite score, best pick |
+| `promptlab/storage.py` | SQLite history (auto-migrates older databases) |
+
+## Scoring
+
+`score = 100 x (0.70*accuracy + 0.10*speed + 0.10*token_efficiency + 0.10*run_efficiency)` by default (presets in the sidebar). Accuracy is the share of non-suspect hidden tests passed. Speed, token and run efficiency are best/value ratios across the techniques in that run.
 
 ## Requirements
 
-- Python 3.10 or newer (Python 3.11 or 3.12 recommended)
-- For cloud AI review: a Groq API key and access to the configured model. For actual local test execution: Docker Desktop installed and running
+- Python 3.10 or newer (3.11 or 3.12 recommended)
+- Optional: Docker Desktop for stronger isolation (without it, a local Python subprocess is used)
 - API key for the selected model provider
 
 ## Windows setup
@@ -57,7 +74,7 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 
 7. Open the local URL printed in the terminal, usually http://localhost:8501.
 
-Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `GROQ_API_KEY` for cloud AI review; without it, the app attempts actual test execution through local Docker.
+The local executor blocks imports such as os/subprocess/socket as a deterrent, but it is not a real sandbox; use Docker for untrusted use. Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `GROQ_API_KEY` for cloud AI review; without it, the app attempts actual test execution through local Docker.
 
 ## Provider configuration
 

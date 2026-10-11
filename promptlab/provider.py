@@ -8,6 +8,8 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from .prompts import SYSTEM_CODE_ONLY
+
 load_dotenv()
 
 
@@ -25,9 +27,10 @@ def get_env_default(name: str, fallback: str = "") -> str:
 
 
 def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
-                  temperature: float = 0.0, custom_base_url: str = "") -> GenerationResult:
+                  temperature: float = 0.0, custom_base_url: str = "",
+                  system: str | None = None, max_tokens: int = 1500) -> GenerationResult:
     if not api_key.strip():
-        raise ValueError("Enter an API key in the sidebar or configure it in your .env file.")
+        raise ValueError("No API key configured. Set it in your .env file or Streamlit Secrets.")
     if not model.strip():
         raise ValueError("Enter a model ID.")
 
@@ -41,7 +44,7 @@ def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
         if base_url is None:
             raise ValueError("Enter the base URL for your OpenAI-compatible provider.")
 
-    kwargs: dict[str, Any] = {"api_key": api_key.strip(), "timeout": 90.0, "max_retries": 1}
+    kwargs: dict[str, Any] = {"api_key": api_key.strip(), "timeout": 90.0, "max_retries": 2}
     if base_url:
         kwargs["base_url"] = base_url
     client = OpenAI(**kwargs)
@@ -50,11 +53,11 @@ def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
     response = client.chat.completions.create(
         model=model.strip(),
         messages=[
-            {"role": "system", "content": "You are a code-generation engine. Output only valid Python source code for the requested function. Do not output Markdown fences, explanations, test cases, or hidden reasoning."},
+            {"role": "system", "content": system or SYSTEM_CODE_ONLY},
             {"role": "user", "content": prompt},
         ],
         temperature=temperature,
-        max_tokens=1200,
+        max_tokens=max_tokens,
     )
     elapsed = time.perf_counter() - started
     content = response.choices[0].message.content or ""
