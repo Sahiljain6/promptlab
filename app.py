@@ -138,7 +138,6 @@ with tab_history:
     else:
         df = pd.DataFrame(history)
         a, b, c = st.columns(3)
-        tested = df[df["status"].isin(["PASSED", "FAILED"])]
         ai_tested = df[df["status"].isin(["AI PASS", "AI FAIL"])]
         runtime_tested = df[df["status"].isin(["PASSED", "FAILED"])]
         a.metric("Saved runs", len(df))
