@@ -120,7 +120,8 @@ The Groq model configured by default supports JSON mode and structured outputs; 
 - Use the same request, test cases, temperature, and model versions for comparisons.
 - Run several tasks and repeated trials before drawing conclusions.
 - AI-estimated outcomes must not be reported as verified pass rates.
-- Generated tests can have incorrect expected values; validate them independently for research-grade claims.
+- Generated tests can have incorrect expected values; validate them independently for research-grade claims. Automatic suspect-test filtering uses actual executed outcomes only; AI estimates are not evidence that a hidden test is wrong.
+- API failures and unavailable evaluations are tracked as missing/invalid trials instead of being treated as incorrect code or receiving a positive composite score. The results table shows total and valid trial counts.
 - Token counts may be estimated when a provider does not report usage.
 
 ## Repository structure
