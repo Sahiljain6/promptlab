@@ -90,8 +90,8 @@ class PipelineTests(unittest.TestCase):
         spec = expand_request("check prime", flaky_llm, attempts=2)
         self.assertEqual(spec.function_name, "is_prime")
         self.assertEqual(calls[0]["response_format"], {"type": "json_object"})
-        self.assertEqual(calls[1]["response_format"], {"type": "json_object"})
-        self.assertIn("Correction required", calls[1]["prompt"])
+        self.assertIsNone(calls[1]["response_format"])
+        self.assertIn("minified JSON only", calls[1]["prompt"])
 
     def test_json_mode_unsupported_provider_uses_prompt_fallback(self):
         calls = []

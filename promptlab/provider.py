@@ -13,7 +13,7 @@ from .prompts import SYSTEM_CODE_ONLY
 load_dotenv()
 
 
-class SpecGenerationError(RuntimeError):
+class SpecGenerationError(ValueError):
     """Safe provider/specification error with optional recoverable model output."""
 
     def __init__(
