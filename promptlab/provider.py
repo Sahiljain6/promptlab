@@ -28,7 +28,8 @@ def get_env_default(name: str, fallback: str = "") -> str:
 
 def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
                   temperature: float = 0.0, custom_base_url: str = "",
-                  system: str | None = None, max_tokens: int = 1500) -> GenerationResult:
+                  system: str | None = None, max_tokens: int = 1500,
+                  response_format: dict[str, Any] | None = None) -> GenerationResult:
     if not api_key.strip():
         raise ValueError("No API key configured. Set it in your .env file or Streamlit Secrets.")
     if not model.strip():
@@ -50,15 +51,18 @@ def generate_code(*, provider: str, api_key: str, model: str, prompt: str,
     client = OpenAI(**kwargs)
 
     started = time.perf_counter()
-    response = client.chat.completions.create(
-        model=model.strip(),
-        messages=[
+    request_args: dict[str, Any] = {
+        "model": model.strip(),
+        "messages": [
             {"role": "system", "content": system or SYSTEM_CODE_ONLY},
             {"role": "user", "content": prompt},
         ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_format is not None:
+        request_args["response_format"] = response_format
+    response = client.chat.completions.create(**request_args)
     elapsed = time.perf_counter() - started
     content = response.choices[0].message.content or ""
     usage = getattr(response, "usage", None)
