@@ -5,7 +5,7 @@ PromptLab is a Streamlit app for the project **“A Comparative Study of Prompt 
 ## What it does
 
 1. Enter a one-line coding request or select a preset task.
-2. Groq creates a shared function specification, examples, and hidden test cases for a one-line request.
+2. Groq creates a shared function specification, visible examples, and hidden test cases for a one-line request. The API call enables JSON mode; malformed or incomplete responses receive a corrective retry, and the app can fall back to Ollama if Groq still cannot produce a valid specification.
 3. PromptLab sends each selected technique to both Groq and Ollama automatically. There is no provider/model selector in the UI.
 4. Compare estimated/observed correctness, solved rate, latency, token usage, and execution time where available.
 5. Rank all model/technique combinations with configurable score weights.
@@ -99,6 +99,21 @@ The app supports Accuracy first, Balanced, and Speed & cost first weighting. A t
 ## Run unit tests
 
     python -m unittest discover -s tests -v
+
+## Custom-task troubleshooting
+
+If a one-line request fails while creating the shared task specification:
+
+- PromptLab requests JSON mode from the provider API instead of relying on prompt wording alone.
+- It extracts a valid JSON object even when a compatible provider adds brief leading prose, validates the function signature and test data, and retries an invalid response once.
+- If Groq still fails, it tries Ollama to build the shared specification. Both coding models still receive that same specification and hidden test suite.
+- Requests are limited to 500 characters. Simplify an unusually complicated request or use the **Preset benchmark task** option to check whether provider credentials and model access work.
+- Check that `GROQ_MODEL` and `OLLAMA_MODEL` are available to the configured accounts. The app will show the provider and error type if both task-specification attempts fail.
+- JSON mode guarantees valid JSON syntax in supported providers, not that every generated expected value is mathematically correct. Verify generated test expectations before treating accuracy as research-grade.
+
+The Groq model configured by default supports JSON mode and structured outputs; Ollama Cloud's OpenAI-compatible chat endpoint also documents JSON mode support:
+- [Groq structured outputs](https://console.groq.com/docs/structured-outputs)
+- [Ollama OpenAI compatibility](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx)
 
 ## Research notes
 
