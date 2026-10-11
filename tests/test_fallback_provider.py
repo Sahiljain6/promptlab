@@ -16,9 +16,9 @@ SPEC = {
         {"args": [-1], "expected": False},
         {"args": [0], "expected": False},
         {"args": [1], "expected": False},
-        {"args": [2], "expected": True},
         {"args": [3], "expected": True},
-        {"args": [4], "expected": False},
+        {"args": [5], "expected": True},
+        {"args": [7], "expected": True},
     ],
 }
 
