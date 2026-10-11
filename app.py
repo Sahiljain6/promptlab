@@ -172,10 +172,33 @@ with tab_run:
         evaluate = evaluator()
         try:
             with st.status("Step 1: creating one shared task specification...", expanded=False) as status:
-                # One shared specification/test suite keeps the Groq-vs-Ollama comparison fair.
-                # The request is then included in every technique prompt sent to both models.
-                spec = expand_request(request, llms["Groq"]) if source == "One-line request" else spec_from_preset(preset)
-                status.update(label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests", state="complete")
+                # A single shared specification and test suite keeps the two coding models comparable.
+                if source == "One-line request":
+                    spec_source = "Groq"
+                    try:
+                        spec = expand_request(request, llms["Groq"])
+                    except Exception as groq_exc:
+                        status.update(
+                            label="Groq could not build a valid task specification; retrying with Ollama...",
+                            state="running",
+                        )
+                        try:
+                            spec = expand_request(request, llms["Ollama"])
+                            spec_source = "Ollama fallback"
+                        except Exception as ollama_exc:
+                            raise RuntimeError(
+                                "Task specification generation failed on both providers. "
+                                f"Groq: {type(groq_exc).__name__}: {str(groq_exc)[:220]}; "
+                                f"Ollama: {type(ollama_exc).__name__}: {str(ollama_exc)[:220]}. "
+                                "Check API credentials, model access, and retry."
+                            ) from ollama_exc
+                else:
+                    spec = spec_from_preset(preset)
+                    spec_source = "Built-in preset"
+                status.update(
+                    label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests · {spec_source}",
+                    state="complete",
+                )
             progress = st.progress(0.0, text="Running every selected technique on Groq and Ollama...")
             records = run_all(
                 spec,
@@ -203,7 +226,7 @@ with tab_run:
                 save_experiment(dict(rec))
             st.session_state["last_run"] = {
                 "spec": spec, "records": records, "rows": rows, "picked": picked, "priority": priority,
-                "exec_mode": exec_mode,
+                "exec_mode": exec_mode, "spec_source": spec_source,
             }
         except Exception as exc:
             st.error(f"Comparison failed: {redact_error(type(exc).__name__ + ': ' + str(exc))}")
@@ -214,6 +237,7 @@ with tab_run:
         st.subheader("1. Shared task specification")
         c1, c2 = st.columns([2, 1])
         c1.markdown(f"**{spec.name}**: {spec.description}")
+        c1.caption(f"Specification source: {run.get('spec_source', 'Groq')}")
         c1.code(spec.signature, language="python")
         c2.write("Visible examples")
         c2.code("\n".join(
