@@ -109,7 +109,7 @@ If a one-line request fails while creating the shared task specification:
 - If Groq still fails, it tries Ollama to build the shared specification. Both coding models still receive that same specification and hidden test suite.
 - Requests are limited to 500 characters. Simplify an unusually complicated request or use the **Preset benchmark task** option to check whether provider credentials and model access work.
 - Check that `GROQ_MODEL` and `OLLAMA_MODEL` are available to the configured accounts. The app will show the provider and error type if both task-specification attempts fail.
-- JSON mode guarantees valid JSON syntax in supported providers, not that every generated expected value is mathematically correct. Verify generated test expectations before treating accuracy as research-grade.
+- JSON mode improves syntactic validity but can still fail on edge cases, and it does not guarantee that every generated expected value is mathematically correct. Verify generated test expectations before treating accuracy as research-grade.
 
 The Groq model configured by default supports JSON mode and structured outputs; Ollama Cloud's OpenAI-compatible chat endpoint also documents JSON mode support:
 - [Groq structured outputs](https://console.groq.com/docs/structured-outputs)
