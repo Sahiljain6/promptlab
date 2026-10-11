@@ -155,6 +155,13 @@ def expand_request(request: str, call: Callable[..., Any], attempts: int = 2) ->
                 if "response_format" not in str(exc):
                     raise
                 reply = call(prompt, system=SPEC_SYSTEM, max_tokens=3500)
+            except Exception as exc:
+                # Some OpenAI-compatible deployments do not implement JSON mode. Fall back
+                # to the strict JSON-only prompt for that specific compatibility failure.
+                detail = str(exc).lower()
+                if "response_format" not in detail and "json_object" not in detail and "json mode" not in detail:
+                    raise
+                reply = call(prompt, system=SPEC_SYSTEM, max_tokens=3500)
             payload = _extract_json(getattr(reply, "text", ""))
             return parse_spec(cleaned_request, payload)
         except Exception as exc:
