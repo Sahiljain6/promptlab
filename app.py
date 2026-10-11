@@ -59,7 +59,10 @@ st.caption("Automatic Groq + Ollama comparison across prompt-engineering techniq
 GROQ_MODEL = secret_or_env("GROQ_MODEL", "openai/gpt-oss-20b")
 OLLAMA_MODEL = secret_or_env("OLLAMA_MODEL", "gpt-oss:20b-cloud")
 OLLAMA_BASE_URL = secret_or_env("OLLAMA_BASE_URL", "https://ollama.com/v1").rstrip("/")
+GEMINI_MODEL = secret_or_env("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 groq_key = secret_or_env("GROQ_API_KEY")
+gemini_key = secret_or_env("GEMINI_API_KEY")
 ollama_url = urlparse(OLLAMA_BASE_URL)
 ollama_is_loopback = ollama_url.scheme == "http" and ollama_url.hostname in {"localhost", "127.0.0.1", "::1"}
 ollama_url_valid = bool(ollama_url.hostname) and (ollama_url.scheme == "https" or ollama_is_loopback)
@@ -91,7 +94,7 @@ def safe_csv(frame: pd.DataFrame) -> str:
 
 def redact_error(value: object) -> str:
     message = str(value)
-    for secret in (groq_key, ollama_key, access_password):
+    for secret in (groq_key, ollama_key, gemini_key, access_password):
         if secret:
             message = message.replace(secret, "[REDACTED]")
     return message[:700]
@@ -100,9 +103,12 @@ with st.sidebar:
     st.header("Connected models")
     st.success("Groq configured" if groq_key else "Missing GROQ_API_KEY")
     st.success("Ollama configured" if ollama_key else "Missing OLLAMA_API_KEY")
-    st.caption("Both models run automatically. API keys are never displayed.")
+    st.caption("Groq and Ollama run normally. Gemini is a last-resort backup and is called only after both primary providers fail.")
+    st.caption("API keys are never displayed.")
     st.caption(f"Groq model: {GROQ_MODEL}")
     st.caption(f"Ollama model: {OLLAMA_MODEL}")
+    st.caption(f"Gemini backup model: {GEMINI_MODEL}")
+    st.caption("Gemini backup configured" if gemini_key else "Optional Gemini backup not configured")
     st.header("Experiment settings")
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     exec_label = st.selectbox(
@@ -138,7 +144,15 @@ llms = {
     "Groq": make_llm("Groq", groq_key, GROQ_MODEL, temperature),
     "Ollama": make_llm("Custom OpenAI-compatible", ollama_key, OLLAMA_MODEL, temperature, OLLAMA_BASE_URL),
 }
-model_names = {"Groq": GROQ_MODEL, "Ollama": OLLAMA_MODEL}
+gemini_llm = (
+    make_llm("Gemini", gemini_key, GEMINI_MODEL, temperature, GEMINI_BASE_URL)
+    if gemini_key else None
+)
+model_names = {
+    "Groq": GROQ_MODEL,
+    "Ollama": OLLAMA_MODEL,
+    "Gemini (fallback)": GEMINI_MODEL,
+}
 
 tab_run, tab_history, tab_method = st.tabs(["⚡ Prompt Lab", "History & analysis", "Research protocol"])
 
@@ -155,7 +169,7 @@ with tab_run:
     selected = st.multiselect("Prompt techniques", [t.name for t in TECHNIQUES], default=[t.name for t in TECHNIQUES])
     ready = bool(groq_key and ollama_key and ollama_url_valid and selected and (request.strip() or source != "One-line request"))
     if not groq_key or not ollama_key:
-        st.info("Add both GROQ_API_KEY and OLLAMA_API_KEY in Streamlit Settings → Secrets. The keys stay hidden.")
+        st.info("Add both GROQ_API_KEY and OLLAMA_API_KEY in Streamlit Settings → Secrets. GEMINI_API_KEY is optional and is used only as a last-resort backup.")
     if not ollama_url_valid:
         st.error("OLLAMA_BASE_URL must use HTTPS. HTTP is allowed only for a localhost Ollama server in local development.")
     go = st.button("Run Groq + Ollama comparison", type="primary", disabled=not ready)
@@ -178,13 +192,13 @@ with tab_run:
                 # A single shared specification and test suite keeps the two coding models comparable.
                 spec_debug = {}
                 if source == "One-line request":
-                    spec, spec_source, spec_debug = generate_shared_spec(
-                        request,
-                        {"Groq": llms["Groq"], "Ollama": llms["Ollama"]},
-                    )
+                    spec_providers = {"Groq": llms["Groq"], "Ollama": llms["Ollama"]}
+                    if gemini_llm is not None:
+                        spec_providers["Gemini"] = gemini_llm
+                    spec, spec_source, spec_debug = generate_shared_spec(request, spec_providers)
                     if spec_source != "Groq":
                         status.update(
-                            label="Groq spec generation failed; using the validated Ollama specification for both models...",
+                            label=f"Using the validated {spec_source} specification after an earlier provider failure...",
                             state="running",
                         )
                 else:
@@ -194,9 +208,12 @@ with tab_run:
                     label=f"Shared specification ready: {spec.signature} · {len(spec.tests)} tests · {spec_source}",
                     state="complete",
                 )
-            if source == "One-line request" and spec_source == "Ollama":
-                st.warning("Groq could not generate a valid specification. The validated Ollama specification will be used for both models to keep the comparison fair.")
-                with st.expander("Debug details"):
+            if source == "One-line request" and spec_source in {"Ollama", "Gemini"}:
+                if spec_source == "Ollama":
+                    st.warning("Groq could not generate a valid specification. The validated Ollama specification will be used for both coding models to keep the comparison fair.")
+                else:
+                    st.warning("Groq and Ollama could not generate a valid task specification. Gemini was contacted as the last-resort backup and its validated specification will be used for both coding models.")
+                with st.expander("Specification fallback diagnostics"):
                     for provider_name, entries in spec_debug.items():
                         st.markdown(f"**{provider_name}**")
                         if not entries:
@@ -207,7 +224,7 @@ with tab_run:
                                 f"token usage: {item.get('token_usage', {})} · error: {item.get('error_type') or 'none'}"
                             )
                             st.code(redact_error(item.get("raw_reply", "") or "(empty response)")[:300], language="text")
-            progress = st.progress(0.0, text="Running every selected technique on Groq and Ollama...")
+            progress = st.progress(0.0, text="Running Groq and Ollama; Gemini is only contacted if both fail...")
             records = run_all(
                 spec,
                 keys,
@@ -219,6 +236,8 @@ with tab_run:
                     done / total,
                     text=f"{done}/{total}: {rec['provider']} · {rec['technique_name']} · trial {rec['trial']}",
                 ),
+                fallback_llm=gemini_llm,
+                fallback_provider_name="Gemini (fallback)",
             )
             progress.empty()
             rows = summarize(records, WEIGHT_PRESETS[priority])
@@ -238,11 +257,11 @@ with tab_run:
             }
         except Exception as exc:
             if isinstance(exc, SpecGenerationError):
-                st.error("Task specification generation failed on both providers. Review Debug details.")
+                st.error("Task specification generation failed on all configured providers. Review Debug details.")
                 diagnostics = getattr(exc, "diagnostics", {})
                 with st.expander("Debug details"):
                     if isinstance(diagnostics, dict):
-                        for provider_name in ("Groq", "Ollama"):
+                        for provider_name in ("Groq", "Ollama", "Gemini"):
                             st.markdown(f"**{provider_name}**")
                             entries = diagnostics.get(provider_name, [])
                             if not entries:
@@ -276,7 +295,7 @@ with tab_run:
             st.warning(f"{suspects} generated test(s) were failed by every variant and treated as suspect; excluded from adjusted accuracy.")
 
         st.subheader("2. Same prompts sent to both models")
-        st.caption("Each selected technique runs on both Groq and Ollama with the same specification, examples and hidden test cases.")
+        st.caption("Every selected technique runs on Groq and Ollama with the same specification and tests. Gemini is used only if both providers return API errors for the same technique/trial.")
         for t in TECHNIQUES:
             if any(r["technique_key"] == t.key for r in records):
                 with st.expander(f"{t.name}: {t.description}"):
@@ -286,7 +305,7 @@ with tab_run:
                         language="text",
                     )
 
-        st.subheader("3. Groq vs Ollama: all results")
+        st.subheader("3. Provider results (Gemini appears only when needed)")
         table = pd.DataFrame([{
             "Rank": row["rank"],
             "Provider": row["provider"],
