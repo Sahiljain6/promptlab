@@ -42,8 +42,8 @@ def evaluate_python_code(
     function_name: str,
     tests: list[dict[str, Any]],
     timeout_seconds: int = 18,
-    huggingface_token: str = "",
-    huggingface_model: str = "zai-org/GLM-5.3:novita",
+    groq_api_key: str = "",
+    groq_model: str = "openai/gpt-oss-20b",
 ) -> dict[str, Any]:
     try:
         ast.parse(code)
@@ -57,15 +57,15 @@ def evaluate_python_code(
             "error": f"SyntaxError on line {exc.lineno}: {exc.msg}",
         }
 
-    token = huggingface_token.strip() or os.getenv("HF_TOKEN", "").strip()
-    model = huggingface_model.strip() or os.getenv("HF_TEST_MODEL", "zai-org/GLM-5.3:novita").strip()
+    token = groq_api_key.strip() or os.getenv("GROQ_API_KEY", "").strip()
+    model = groq_model.strip() or os.getenv("GROQ_TEST_MODEL", "openai/gpt-oss-20b").strip()
     if token:
-        return _evaluate_with_huggingface(code, function_name, tests, token, model, timeout_seconds)
+        return _evaluate_with_groq(code, function_name, tests, token, model, timeout_seconds)
 
     if not shutil.which("docker"):
         return _not_tested(
             len(tests),
-            "No HF_TOKEN was configured and Docker is unavailable. Add HF_TOKEN in Streamlit Settings → Secrets for AI-based evaluation, or use Docker for actual local execution.",
+            "No GROQ_API_KEY was configured and Docker is unavailable. Add GROQ_API_KEY in Streamlit Settings → Secrets for AI-based review, or use Docker for actual local execution.",
         )
 
     name = "promptlab-" + uuid.uuid4().hex[:12]
@@ -116,7 +116,7 @@ def evaluate_python_code(
         return _format_runner_payload(payload, len(tests))
 
 
-def _evaluate_with_huggingface(
+def _evaluate_with_groq(
     code: str,
     function_name: str,
     tests: list[dict[str, Any]],
@@ -124,7 +124,7 @@ def _evaluate_with_huggingface(
     model: str,
     timeout_seconds: int,
 ) -> dict[str, Any]:
-    """Use an LLM to predict test outcomes; this does not execute candidate Python code."""
+    """Use Groq to predict test outcomes; this does not execute candidate Python code."""
     evaluation_input = {
         "function_name": function_name,
         "candidate_python_code": code[:12000],
@@ -145,7 +145,7 @@ def _evaluate_with_huggingface(
     )
     try:
         client = OpenAI(
-            base_url="https://router.huggingface.co/v1",
+            base_url="https://api.groq.com/openai/v1",
             api_key=token,
             timeout=max(10, timeout_seconds + 10),
             max_retries=1,
@@ -191,12 +191,12 @@ def _evaluate_with_huggingface(
             "total_tests": len(tests),
             "task_passed": all_passed,
             "results": results,
-            "error": "AI-estimated outcomes only: Hugging Face reviewed the code but did not execute it.",
+            "error": "AI-estimated outcomes only: Groq reviewed the code but did not execute it.",
         }
     except Exception as exc:
         return _not_tested(
             len(tests),
-            f"Hugging Face AI evaluation failed ({type(exc).__name__}: {exc}). No test execution was performed.",
+            f"Groq AI evaluation failed ({type(exc).__name__}: {exc}). No test execution was performed.",
         )
 
 
