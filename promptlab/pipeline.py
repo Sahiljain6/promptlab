@@ -14,7 +14,7 @@ from .tasks import TaskSpec
 
 LLM = Callable[..., Any]            # (prompt, system=None, max_tokens=...) -> object with text/latency/tokens
 Evaluator = Callable[[str, str, list], dict]
-REPAIRABLE = {"FAILED", "SYNTAX ERROR", "EXECUTION ERROR", "TIMEOUT", "BLOCKED", "RUNNER ERROR"}
+REPAIRABLE = {"FAILED", "AI FAIL", "SYNTAX ERROR", "EXECUTION ERROR", "TIMEOUT", "BLOCKED", "RUNNER ERROR"}
 MAX_REPAIR_ROUNDS = 2
 
 
@@ -86,20 +86,34 @@ def run_technique(technique_key: str, spec: TaskSpec, llm: LLM, evaluate: Evalua
     return record
 
 
-def run_all(spec: TaskSpec, technique_keys: list[str], llm: LLM, evaluate: Evaluator, trials: int = 1,
+def run_all(spec: TaskSpec, technique_keys: list[str], llm: LLM | dict[str, LLM], evaluate: Evaluator, trials: int = 1,
             workers: int = 4, on_progress: Callable[[int, int, dict], None] | None = None) -> list[dict[str, Any]]:
-    """Run every selected technique (x trials) concurrently, then score tests against each other."""
+    """Run every selected technique against one or more models using the same task and tests.
+
+    A single LLM preserves the original API; a mapping such as {"Groq": groq_client, "Gemini": gemini_client}
+    creates one trial for every provider × technique pair.
+    """
     order = {t.key: i for i, t in enumerate(TECHNIQUES)}
-    jobs = [(key, trial) for key in technique_keys for trial in range(1, trials + 1)]
+    llms = llm if isinstance(llm, dict) else {"Model": llm}
+    jobs = [(provider, client, key, trial)
+            for provider, client in llms.items()
+            for key in technique_keys
+            for trial in range(1, trials + 1)]
     records: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = [pool.submit(run_technique, key, spec, llm, evaluate, trial) for key, trial in jobs]
+        futures = {
+            pool.submit(run_technique, key, spec, client, evaluate, trial): provider
+            for provider, client, key, trial in jobs
+        }
         for done, future in enumerate(as_completed(futures), 1):
             record = future.result()
+            record["provider"] = futures[future]
+            record["comparison_key"] = f"{record['provider']}::{record['technique_key']}"
             records.append(record)
             if on_progress:
                 on_progress(done, len(jobs), record)
-    records.sort(key=lambda r: (order[r["technique_key"]], r["trial"]))
+    provider_order = {name: index for index, name in enumerate(llms)}
+    records.sort(key=lambda r: (provider_order.get(r["provider"], 99), order[r["technique_key"]], r["trial"]))
     annotate(records, flag_suspect_tests(records))
     run_id = uuid.uuid4().hex[:10]
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")

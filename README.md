@@ -1,44 +1,41 @@
-# PromptLab — Code Generation Accuracy Research
+# PromptLab — Dual-Model Code Generation Research
 
-PromptLab is a Streamlit web application for the project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It calls a real LLM API, compares five prompt templates, evaluates generated Python functions, and stores experiment results in SQLite for analysis and CSV export.
+PromptLab is a Streamlit application for the research project **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It sends each selected prompt-engineering technique to **Groq and Gemini automatically**, tests the generated Python implementations, scores every model/technique pair, and shows the best-ranked response along with all generated code outputs.
 
 ## What it does
 
-Type **one line** (for example *"find the second largest number in a list without sorting"*) and PromptLab will:
+1. Enter a one-line coding request or choose a preset benchmark.
+2. Groq creates a shared function specification, visible examples, and hidden test cases for a one-line request so both coding models face the same benchmark.
+3. PromptLab sends the same selected techniques to both **Groq** and **Gemini**; there is no provider or model selector in the interface.
+4. Compare correctness, solved rate, generation latency, token usage, and execution time where available.
+5. Rank every provider/technique pair using a configurable weighted score.
+6. Display every generated solution and detailed test outcomes, plus the best-ranked prompt/code and example/custom output.
+7. Save experiment history and download CSV/JSON results.
 
-1. Turn it into a function specification (name, typed signature, description, 2 visible examples) plus 8-10 hidden tests.
-2. Build the prompt for **10 techniques**: zero-shot, few-shot, persona, function signature + docstring, structured specification, private planning, chain-of-thought, structured CoT, decomposition and self-repair (generate, run on examples, repair).
-3. Send every prompt to the same model and **really execute** the returned code (Docker if available, otherwise a local subprocess with timeouts).
-4. Report per technique: accuracy, solved rate, generation time, tokens, and code run time, with charts.
-5. Rank the techniques with a weighted score and show the **best prompt, its code and its real output**, with a box to try your own input.
-
-Other features: preset benchmark tasks with hand-written tests, repeat trials, suspect-test detection (tests that every technique fails are excluded from accuracy), SQLite history, CSV and JSON export, optional Groq AI-estimate mode (clearly labelled, does not execute code).
-
-## Project structure
-
-| File | Role |
-|---|---|
-| `app.py` | Streamlit interface |
-| `promptlab/prompts.py` | The 10 technique templates and code extraction |
-| `promptlab/tasks.py` | One-line request to specification and tests; preset tasks |
-| `promptlab/pipeline.py` | Concurrent runs, self-repair loop, output demo |
-| `promptlab/sandbox.py` | Docker / local / AI-estimate executors with timing |
-| `promptlab/scoring.py` | Suspect-test filter, per-technique summary, composite score, best pick |
-| `promptlab/storage.py` | SQLite history (auto-migrates older databases) |
-
-## Scoring
-
-`score = 100 x (0.70*accuracy + 0.10*speed + 0.10*token_efficiency + 0.10*run_efficiency)` by default (presets in the sidebar). Accuracy is the share of non-suspect hidden tests passed. Speed, token and run efficiency are best/value ratios across the techniques in that run.
+The ten prompt techniques are zero-shot, few-shot, persona-based, function signature + docstring, structured specification, private planning, chain-of-thought, structured chain-of-thought, decomposition, and self-repair.
 
 ## Requirements
 
-- Python 3.10 or newer (3.11 or 3.12 recommended)
-- Optional: Docker Desktop for stronger isolation (without it, a local Python subprocess is used)
-- API key for the selected model provider
+- Python 3.10 or newer (Python 3.11 or 3.12 recommended).
+- Both a Groq API key and a Gemini API key.
+- Optional Docker Desktop for stronger code-execution isolation.
 
-## Windows setup
+## Configure API keys
 
-1. Download or clone this repository and open a terminal in the project folder.
+### Streamlit Cloud
+
+Open your Streamlit app dashboard → **Settings → Secrets**. Store both keys there:
+
+```toml
+GROQ_API_KEY = "your-groq-api-key"
+GEMINI_API_KEY = "your-gemini-api-key"
+```
+
+The keys are read on the server and are not rendered as input fields in the interface. Never commit real API keys to GitHub. If the app is public, visitors can still trigger API usage and costs, so restrict access or add authentication and rate limits.
+
+### Local Windows setup
+
+1. Clone or download the repository and open PowerShell in the project folder.
 2. Create and activate a virtual environment:
 
    ```powershell
@@ -53,34 +50,48 @@ Other features: preset benchmark tasks with hand-written tests, repeat trials, s
    pip install -r requirements.txt
    ```
 
-4. Copy `.env.example` to `.env` and add your API key. Never commit `.env` to GitHub.
+4. Copy `.env.example` to `.env` and set both keys:
 
    ```powershell
    Copy-Item .env.example .env
    ```
 
-5. Start Docker Desktop and pull the sandbox image:
-
-   ```powershell
-   docker pull python:3.12-slim
-   docker info
-   ```
-
-6. Start the application:
+5. Start the app:
 
    ```powershell
    python -m streamlit run app.py
    ```
 
-7. Open the local URL printed in the terminal, usually http://localhost:8501.
+6. Open the localhost URL shown in the terminal, typically http://localhost:8501.
 
-The local executor blocks imports such as os/subprocess/socket as a deterrent, but it is not a real sandbox; use Docker for untrusted use. Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `GROQ_API_KEY` for cloud AI review; without it, the app attempts actual test execution through local Docker.
+## Backend model defaults
 
-## Provider configuration
+The app fixes the model IDs in backend settings, so visitors cannot select a different model:
+- Groq: `openai/gpt-oss-20b`
+- Gemini: `gemini-3.8-flash`
 
-The default code-generation provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in local `.env` or in Streamlit Cloud app Settings → Secrets. OpenAI and other compatible endpoints are also supported. Use `OPENAI_API_KEY` for OpenAI, or `PROMPTLAB_API_KEY`, `PROMPTLAB_BASE_URL`, and optionally `PROMPTLAB_MODEL` for a compatible code-generation endpoint.
+Optional backend overrides can be set as Streamlit Secrets or local environment variables: `GROQ_MODEL`, `GEMINI_MODEL`, and `GROQ_TEST_MODEL`. For a comparable experiment, keep the IDs stable across trials.
 
-Cloud test review uses the Groq API with `GROQ_API_KEY` and optional `GROQ_TEST_MODEL` (default `openai/gpt-oss-20b`). Add those values to Streamlit Cloud Settings → Secrets or your local `.env` file. The Groq model predicts test outcomes by inspecting the code; it does not execute Python. These outcomes must be labeled and analyzed as AI estimates, not ground-truth runtime results.
+Gemini uses Google's OpenAI-compatible endpoint `https://generativelanguage.googleapis.com/v1beta/openai/`; the API key is the Gemini key. See [Google's OpenAI compatibility guide](https://ai.google.dev/gemini-api/docs/openai).
+
+## Test evaluation modes
+
+- **AI estimate via Groq (default):** asks Groq to predict likely outcomes by inspecting each generated solution. It does not execute Python, so label these results as AI estimates rather than verified correctness.
+- **Auto:** uses Docker if available; otherwise it uses a local Python subprocess.
+- **Local Python:** executes the code in a subprocess with time/resource limits and blocks some imports as a deterrent. This is not a security boundary.
+- **Docker sandbox:** runs the code in a Docker container with network disabled, resource limits and a read-only work directory.
+
+For research-grade correctness, prefer actual execution inside Docker and validate generated test expectations. Do not run untrusted generated code in a public service using an ordinary subprocess without additional isolation.
+
+## Scoring and metrics
+
+The default score is:
+
+`score = 100 × (0.70 × accuracy + 0.10 × speed + 0.10 × token efficiency + 0.10 × execution efficiency)`
+
+The sidebar offers Accuracy first, Balanced, and Speed & cost first weight presets. Accuracy excludes test cases that every model/technique failed, which are flagged as potentially suspect. If a provider does not report token counts, PromptLab estimates tokens using characters divided by four.
+
+Metrics include adjusted test accuracy, solved rate, generation latency, token usage, execution time where measured, and the composite score.
 
 ## Run unit tests
 
@@ -88,30 +99,20 @@ Cloud test review uses the Groq API with `GROQ_API_KEY` and optional `GROQ_TEST_
 python -m unittest discover -s tests -v
 ```
 
-## Run an experiment
+## Project structure
 
-1. Choose a preset task or define a custom task.
-2. Confirm the function signature and expected test cases.
-3. Keep model, temperature, task, and test cases the same when comparing prompting techniques.
-4. Select techniques and click **Run experiment**.
-5. Inspect the generated code and test estimates. Cloud results are AI predictions; local Docker results are actual runtime outcomes.
-6. Use History & analysis to compare saved runs and export a CSV.
+| File | Purpose |
+|---|---|
+| `app.py` | Streamlit UI, dual-model comparison, charts, results, and exports |
+| `promptlab/prompts.py` | Ten prompt templates and code extraction |
+| `promptlab/tasks.py` | Request-to-specification flow and preset tasks |
+| `promptlab/pipeline.py` | Concurrent model/technique runs and self-repair |
+| `promptlab/provider.py` | OpenAI-compatible clients for Groq, Gemini, and optional custom endpoints |
+| `promptlab/sandbox.py` | Docker, local, and Groq AI-estimate evaluation modes |
+| `promptlab/scoring.py` | Suspect-test filtering, ranking, composite scores, best-response selection |
+| `promptlab/storage.py` | SQLite experiment history and schema migration |
+| `tests/` | Prompt, pipeline, and execution tests |
 
-Ground-truth test cases are not included in the code-generation prompt. The separate Groq reviewer receives the candidate code and test cases to estimate outcomes; it does not execute the code.
+## Research cautions
 
-## Metrics
-
-- **Task success rate:** percentage of generated solutions passing every test.
-- **Runtime test pass rate:** passed cases divided by actually executed cases. This metric is only valid for the local Docker executor; Groq outcomes are estimates, not execution results.
-- **Latency:** API response time, excluding test execution.
-- **Token usage:** prompt/completion counts when returned by the provider.
-
-API errors and runs not tested because Docker is unavailable should not be treated as verified code failures.
-
-## Safety notes
-
-Generated code is untrusted. Cloud AI review calls the Groq API and predicts outcomes from source code; it is not a secure execution sandbox and cannot verify actual runtime behavior. Actual local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
-
-## Research limitations
-
-The included preset suite is a starter test set, not a standardized benchmark. Expand task diversity, run repeated trials, preserve raw records, and compare multiple model IDs before making broad claims about prompting techniques.
+Use the same task definition and tests for both models, repeat trials, compare more than one task family, and retain raw records. A single model can make mistakes when creating specifications or judging code. AI-estimated results are not execution results; do not present them as verified pass rates.

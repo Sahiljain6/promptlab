@@ -93,5 +93,18 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(evaluate_python_code("def is_prime(n):\n    while True: pass\n", "is_prime", tests, timeout_seconds=3, mode="local")["status"], "TIMEOUT")
 
 
+    def test_dual_model_run_compares_provider_and_technique_pairs(self):
+        spec = expand_request("check prime", fake_llm)
+        clients = {"Groq": fake_llm, "Gemini": fake_llm}
+        records = run_all(spec, ["zero_shot", "function_signature"], clients, local_eval, workers=4)
+        self.assertEqual(len(records), 4)
+        self.assertEqual({r["provider"] for r in records}, {"Groq", "Gemini"})
+        rows = summarize(records, WEIGHT_PRESETS["Accuracy first"])
+        self.assertEqual(len(rows), 4)
+        top, best = pick_best(rows, records)
+        self.assertEqual(best["provider"], top["provider"])
+        self.assertEqual(top["comparison_key"], f'{best["provider"]}::{best["technique_key"]}')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -47,21 +47,27 @@ def _norm_low(value: float | None, best: float | None, eps: float) -> float:
 
 
 def summarize(records: list[dict[str, Any]], weights: tuple[float, float, float, float]) -> list[dict[str, Any]]:
-    """One row per technique, ranked by composite score (0-100)."""
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    """One row per provider × technique, ranked by composite score (0-100)."""
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    providers = {r.get("provider", "Model") for r in records}
     for r in records:
-        groups[r["technique_key"]].append(r)
+        provider = r.get("provider", "Model")
+        groups[(provider, r["technique_key"])].append(r)
     rows = []
-    for key, items in groups.items():
-        ok = [r for r in items if r.get("status") != "API ERROR"]
+    for (provider, key), items in groups.items():
+        ok = [r for r in items if r.get("status") not in {"API ERROR", "NOT TESTED"}]
         times = [r["exec_ms"] for r in ok if r.get("exec_ms") is not None]
+        display = f"{provider} · {items[0]['technique_name']}" if len(providers) > 1 else items[0]["technique_name"]
         rows.append({
+            "comparison_key": f"{provider}::{key}",
+            "provider": provider,
             "technique_key": key,
-            "technique": items[0]["technique_name"],
+            "technique": display,
+            "technique_name": items[0]["technique_name"],
             "trials": len(items),
             "accuracy": mean(r["adj_rate"] for r in items) if items else 0.0,
             "solved_rate": mean(1.0 if r["solved"] else 0.0 for r in items),
-            "gen_latency_s": mean(r["latency_seconds"] for r in ok) if ok else None,
+            "gen_latency_s": mean(r["latency_seconds"] for r in ok if r.get("latency_seconds") is not None) if any(r.get("latency_seconds") is not None for r in ok) else None,
             "tokens": mean((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0) for r in ok) if ok else None,
             "exec_ms": mean(times) if times else None,
         })
@@ -83,12 +89,20 @@ def summarize(records: list[dict[str, Any]], weights: tuple[float, float, float,
 
 
 def pick_best(rows: list[dict[str, Any]], records: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    """Best technique row and its best individual trial (most tests passed, then fewest tokens)."""
+    """Best provider-and-technique pair and its best individual trial."""
     if not rows:
         return None
     top = rows[0]
-    trials = [r for r in records if r["technique_key"] == top["technique_key"] and r.get("status") != "API ERROR"]
+    trials = [
+        r for r in records
+        if r["technique_key"] == top["technique_key"]
+        and r.get("provider", "Model") == top.get("provider", "Model")
+        and r.get("status") not in {"API ERROR", "NOT TESTED"}
+    ]
     if not trials:
         return None
-    best = max(trials, key=lambda r: (r["adj_rate"], -((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0))))
+    best = max(trials, key=lambda r: (
+        r["adj_rate"],
+        -((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0))
+    ))
     return top, best
