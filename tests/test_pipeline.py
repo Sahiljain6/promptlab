@@ -8,7 +8,7 @@ from promptlab.pipeline import run_all, show_outputs
 from promptlab.prompts import TECHNIQUES, build_prompt, clean_generated_code
 from promptlab.sandbox import evaluate_python_code
 from promptlab.scoring import WEIGHT_PRESETS, pick_best, summarize
-from promptlab.tasks import _extract_json, expand_request, parse_spec
+from promptlab.tasks import _extract_json, expand_request, parse_spec, spec_from_preset
 
 SPEC = {"name": "Prime check", "function_name": "is_prime", "signature": "def is_prime(n: int) -> bool:",
         "description": "Return True if n is prime.",
@@ -100,6 +100,15 @@ class PipelineTests(unittest.TestCase):
         duplicate = dict(SPEC, tests=SPEC["tests"] + [{"args": [2], "expected": True}])
         with self.assertRaises(ValueError):
             parse_spec("check prime", duplicate)
+
+    def test_presets_keep_visible_examples_out_of_hidden_tests(self):
+        for key in ("Palindrome checker", "Prime number checker", "Count vowels", "FizzBuzz"):
+            with self.subTest(preset=key):
+                spec = spec_from_preset(key)
+                visible = {json.dumps(case["args"], sort_keys=True) for case in spec.examples}
+                hidden = {json.dumps(case["args"], sort_keys=True) for case in spec.tests}
+                self.assertTrue(spec.tests)
+                self.assertFalse(visible & hidden)
 
     def test_full_run_ranks_and_flags_suspect_tests(self):
         spec = expand_request("check prime", fake_llm)
