@@ -43,7 +43,7 @@ def evaluate_python_code(
     tests: list[dict[str, Any]],
     timeout_seconds: int = 18,
     groq_api_key: str = "",
-    groq_model: str = "openai/gpt-oss-20b",
+    groq_model: str = "",
 ) -> dict[str, Any]:
     try:
         ast.parse(code)
