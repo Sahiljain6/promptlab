@@ -100,8 +100,13 @@ def parse_spec(request: str, payload: dict[str, Any]) -> TaskSpec:
     if not description:
         raise ValueError("description must not be empty.")
 
-    example_inputs = {json.dumps(case["args"], sort_keys=True, ensure_ascii=False) for case in examples}
-    test_inputs = {json.dumps(case["args"], sort_keys=True, ensure_ascii=False) for case in tests}
+    example_keys = [json.dumps(case["args"], sort_keys=True, ensure_ascii=False) for case in examples]
+    test_keys = [json.dumps(case["args"], sort_keys=True, ensure_ascii=False) for case in tests]
+    example_inputs, test_inputs = set(example_keys), set(test_keys)
+    if len(example_inputs) != len(example_keys):
+        raise ValueError("Visible example inputs must be unique. Retry task-specification generation.")
+    if len(test_inputs) != len(test_keys):
+        raise ValueError("Hidden test inputs must be unique. Retry task-specification generation.")
     if example_inputs & test_inputs:
         raise ValueError("Hidden tests must not repeat the visible example inputs. Retry task-specification generation.")
 
