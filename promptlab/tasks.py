@@ -163,9 +163,20 @@ def expand_request(request: str, call: Callable[..., Any], attempts: int = 2) ->
 
 def spec_from_preset(key: str) -> TaskSpec:
     task = PRESET_TASKS[key]
-    return TaskSpec(request=task["description"], name=task["name"], description=task["description"],
-                    function_name=task["function_name"], signature=task["signature"],
-                    examples=task["tests"][:2], tests=task["tests"])
+    all_cases = task["tests"]
+    examples = all_cases[:2]
+    hidden_tests = all_cases[2:]
+    if not hidden_tests:
+        raise ValueError(f"Preset {key!r} needs at least one hidden test beyond its visible examples.")
+    return TaskSpec(
+        request=task["description"],
+        name=task["name"],
+        description=task["description"],
+        function_name=task["function_name"],
+        signature=task["signature"],
+        examples=examples,
+        tests=hidden_tests,
+    )
 
 
 PRESET_TASKS = {
