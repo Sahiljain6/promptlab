@@ -32,7 +32,8 @@ with st.sidebar:
     model = st.text_input("Model ID", value=model_default)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     st.divider()
-    judge0_api_key = st.text_input("Judge0 RapidAPI key (cloud sandbox)", value="", type="password", help="Optional for cloud deployment. A key enables remote isolated execution; it is used for this session only.")\n    st.caption("Cloud: enter a Judge0 RapidAPI key to run tests in a separate sandbox. Local fallback: Docker Desktop.")
+    judge0_api_key = st.text_input("Judge0 RapidAPI key (cloud sandbox)", value="", type="password", help="Optional for cloud deployment. A key enables remote isolated execution; it is used for this session only.")
+    st.caption("Cloud: enter a Judge0 RapidAPI key to run tests in a separate sandbox. Local fallback: Docker Desktop.")
 
 tab_run, tab_history, tab_method = st.tabs(["Run experiment", "History & analysis", "Research protocol"])
 
