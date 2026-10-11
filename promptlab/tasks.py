@@ -36,7 +36,7 @@ Return exactly ONE valid JSON object and no Markdown fences, commentary, or extr
 
 Rules: "args" is a JSON list of positional arguments and "expected" must be a JSON value (use lists, never tuples or sets).
 The target function must be deterministic, with no input/output, randomness, filesystem access, network access, or external libraries.
-Work out each expected value carefully. Do not repeat example inputs in the hidden tests. Output valid JSON only."""
+Work out each expected value carefully. Every hidden test input must be unique, and no hidden test may repeat a visible example input. Output valid JSON only."""
 
 
 
