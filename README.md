@@ -8,7 +8,7 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 - Real inference using Groq, OpenAI, or a custom OpenAI-compatible endpoint
 - Five techniques: zero-shot, few-shot, persona-based, structured specification, and stepwise planning
 - Preset tasks plus custom task and test-case editor
-- Cloud AI review through Hugging Face Router (predicts likely test outcomes by code inspection; it does not execute Python)
+- Cloud AI review through the Groq API (predicts likely test outcomes by code inspection; it does not execute Python)
 - Optional local Docker test execution with network disabled, resource limits, read-only work mount, non-root user, and timeout
 - Correctness, test pass rate, model latency, and token usage when reported by the provider
 - SQLite history, aggregate charts, and CSV export
@@ -16,7 +16,7 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 ## Requirements
 
 - Python 3.10 or newer (Python 3.11 or 3.12 recommended)
-- For cloud AI review: a Hugging Face access token with access to the configured Router model. For actual local test execution: Docker Desktop installed and running
+- For cloud AI review: a Groq API key and access to the configured model. For actual local test execution: Docker Desktop installed and running
 - API key for the selected model provider
 
 ## Windows setup
@@ -57,13 +57,13 @@ PromptLab is a Streamlit web application for the project **“A Comparative Stud
 
 7. Open the local URL printed in the terminal, usually http://localhost:8501.
 
-Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `HF_TOKEN` for cloud AI review; without it, the app attempts actual test execution through local Docker.
+Credentials are loaded from server-side Streamlit Secrets or local environment variables; the app does not render API-key input fields and keys are not stored in the experiment database. Configure `GROQ_API_KEY` for cloud AI review; without it, the app attempts actual test execution through local Docker.
 
 ## Provider configuration
 
 The default code-generation provider is Groq, using the OpenAI-compatible endpoint. The default model ID is `openai/gpt-oss-20b`; model availability may change, so use an active model ID from your provider dashboard. Configure `GROQ_API_KEY` in local `.env` or in Streamlit Cloud app Settings → Secrets. OpenAI and other compatible endpoints are also supported. Use `OPENAI_API_KEY` for OpenAI, or `PROMPTLAB_API_KEY`, `PROMPTLAB_BASE_URL`, and optionally `PROMPTLAB_MODEL` for a compatible code-generation endpoint.
 
-Cloud test review uses the Hugging Face Router with `HF_TOKEN` and optional `HF_TEST_MODEL` (default `zai-org/GLM-5.3:novita`). Add those values to Streamlit Cloud Settings → Secrets or your local `.env` file. The Hugging Face model predicts test outcomes by inspecting the code; it does not execute Python. These outcomes must be labeled and analyzed as AI estimates, not ground-truth runtime results.
+Cloud test review uses the Groq API with `GROQ_API_KEY` and optional `GROQ_TEST_MODEL` (default `openai/gpt-oss-20b`). Add those values to Streamlit Cloud Settings → Secrets or your local `.env` file. The Groq model predicts test outcomes by inspecting the code; it does not execute Python. These outcomes must be labeled and analyzed as AI estimates, not ground-truth runtime results.
 
 ## Run unit tests
 
@@ -80,12 +80,12 @@ python -m unittest discover -s tests -v
 5. Inspect the generated code and actual test outcomes.
 6. Use History & analysis to compare saved runs and export a CSV.
 
-Ground-truth tests are used by the evaluator and are not sent to the model.
+Ground-truth test cases are not included in the code-generation prompt. The separate Groq reviewer receives the candidate code and test cases to estimate outcomes; it does not execute the code.
 
 ## Metrics
 
 - **Task success rate:** percentage of generated solutions passing every test.
-- **Runtime test pass rate:** passed cases divided by actually executed cases. This metric is only valid for the local Docker executor; Hugging Face outcomes are estimates, not execution results.
+- **Runtime test pass rate:** passed cases divided by actually executed cases. This metric is only valid for the local Docker executor; Groq outcomes are estimates, not execution results.
 - **Latency:** API response time, excluding test execution.
 - **Token usage:** prompt/completion counts when returned by the provider.
 
@@ -93,7 +93,7 @@ API errors and runs not tested because Docker is unavailable should not be treat
 
 ## Safety notes
 
-Generated code is untrusted. Cloud AI review calls the Hugging Face Router and predicts outcomes from source code; it is not a secure execution sandbox and cannot verify actual runtime behavior. Actual local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
+Generated code is untrusted. Cloud AI review calls the Groq API and predicts outcomes from source code; it is not a secure execution sandbox and cannot verify actual runtime behavior. Actual local execution uses Docker with no network, a read-only mounted work directory, a non-root user, CPU/memory/PID limits, and a timeout. No sandbox guarantees perfect isolation. Never commit keys to GitHub. On Streamlit Cloud, store credentials in the app's Settings → Secrets rather than source code. Server-side secrets are not displayed to visitors, but visitors who can use a public app may still trigger API calls and costs; restrict access or add authentication and rate limiting before using your own paid provider key in a public deployment. Do not expose a self-hosted executor publicly without authentication, rate limiting, secret management, and a security review.
 
 ## Research limitations
 
