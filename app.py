@@ -16,7 +16,7 @@ load_dotenv()
 st.set_page_config(page_title="PromptLab", page_icon="🧪", layout="wide")
 st.title("🧪 PromptLab")
 st.caption("A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs")
-st.markdown("Compare prompt strategies using model-generated Python code. In the cloud, Hugging Face estimates test outcomes by inspecting code; it does not execute Python. Actual execution is available through the local Docker fallback.")
+st.markdown("Compare prompt strategies using model-generated Python code. In the cloud, Groq estimates test outcomes by inspecting code; it does not execute Python. Actual execution is available through the local Docker fallback.")
 
 def secret_or_env(name: str, default: str = "") -> str:
     """Read credentials from Streamlit Secrets first, then local environment variables."""
@@ -48,12 +48,12 @@ with st.sidebar:
     if not api_key:
         st.warning(f"Provider key is not configured. Add {secret_name} under Streamlit app Settings → Secrets, or set it in your local .env file.")
     st.divider()
-    hf_test_token = secret_or_env("HF_TOKEN")
-    hf_test_model = secret_or_env("HF_TEST_MODEL", "zai-org/GLM-5.3:novita")
-    if hf_test_token:
-        st.caption(f"Hugging Face test reviewer configured ({hf_test_model}). Its results are AI predictions, not executed test results.")
+    groq_test_api_key = secret_or_env("GROQ_API_KEY")
+    groq_test_model = secret_or_env("GROQ_TEST_MODEL", "openai/gpt-oss-20b")
+    if groq_test_api_key:
+        st.caption(f"Groq AI test reviewer configured ({groq_test_model}). Its results are AI predictions, not executed test results.")
     else:
-        st.caption("No HF_TOKEN configured. Local runs can execute tests with Docker; add HF_TOKEN in Streamlit Settings → Secrets to enable cloud AI review.")
+        st.caption("No GROQ_API_KEY configured for cloud AI review. Add GROQ_API_KEY in Streamlit Settings → Secrets; local runs can execute tests with Docker.")
 
 tab_run, tab_history, tab_method = st.tabs(["Run experiment", "History & analysis", "Research protocol"])
 
@@ -94,7 +94,7 @@ with tab_run:
                 generated = generate_code(provider=provider, api_key=api_key, model=model, prompt=prompt,
                                           temperature=temperature, custom_base_url=base_url)
                 code = clean_generated_code(generated.text)
-                evaluation = evaluate_python_code(code, function_name, tests, huggingface_token=hf_test_token, huggingface_model=hf_test_model)
+                evaluation = evaluate_python_code(code, function_name, tests, groq_api_key=groq_test_api_key, groq_model=groq_test_model)
                 record = {
                     "task_name": task_name, "function_name": function_name, "provider": provider,
                     "model": generated.model, "technique_key": technique.key, "technique_name": technique.name,
@@ -148,7 +148,7 @@ with tab_history:
                 AI_Estimated_Success_Rate=("task_passed", "mean"), Average_Latency=("latency_seconds", "mean"), Runs=("id", "count"))
             summary["AI_Estimated_Success_Rate"] *= 100
             st.subheader("AI-estimated task success rate by technique (%)")
-            st.caption("These are Hugging Face model estimates based on code inspection, not actual program execution. For research-grade correctness results, use runtime tests in a sandbox.")
+            st.caption("These are Groq model estimates based on code inspection, not actual program execution. For research-grade correctness results, use runtime tests in a sandbox.")
             st.bar_chart(summary.set_index("technique_name")["AI_Estimated_Success_Rate"])
             st.dataframe(summary, use_container_width=True, hide_index=True)
         if not runtime_tested.empty:
@@ -182,7 +182,7 @@ with tab_method:
     st.markdown("""
 1. Use the same model ID, task specification, test cases, and temperature for each technique.
 2. Run all techniques against the same task and repeat trials to account for model variability.
-3. Test cases are not included in the code-generation prompt. Cloud Hugging Face evaluation is an estimate, not an execution oracle; use actual runtime sandboxing for definitive pass/fail results.
+3. Test cases are not included in the code-generation prompt. Cloud Groq evaluation is an estimate, not an execution oracle; use actual runtime sandboxing for definitive pass/fail results.
 4. Report task success rate, test pass rate, latency, and token counts when available.
 5. Record model/version, date, task IDs, prompt templates, and provider changes.
 6. Avoid broad claims from a small number of tasks; expand the benchmark and repeat trials.
