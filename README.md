@@ -172,6 +172,18 @@ Continuous integration compiles the application, runs unit/security regression t
 
 JSON mode and response recovery improve reliability but cannot guarantee the mathematical correctness of generated test expectations. Validate the test suite independently for research-grade results.
 
+## Reusable prompt-engineering skill
+
+PromptLab now also includes a **portable prompt-engineering skill** that other compatible AI agents can reuse to turn ordinary requests into clear, actionable prompts. It is separate from the Streamlit code-generation research app and does not require API keys or a specific model.
+
+- [Skill quick start](skills/prompt-engineering/README.md)
+- [Core agent instructions](skills/prompt-engineering/SKILL.md)
+- [Technique selection guide and review rubric](skills/prompt-engineering/references/technique-selection.md)
+- [Before/after examples](skills/prompt-engineering/examples/transformations.md)
+- [Integration guidance](docs/skill-integration.md)
+
+The skill preserves user intent and constraints, chooses techniques based on the task, defines output and acceptance criteria where useful, and emphasizes safety and honest verification. Agent compatibility depends on the target platform's supported skill-loading format.
+
 ## Repository structure
 
 - `app.py` — Streamlit UI, access control, provider configuration, comparison flow, charts, and exports.
