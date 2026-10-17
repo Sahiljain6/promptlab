@@ -17,6 +17,7 @@ PromptLab combines two related but distinct components: a portable skill that he
 - [How the skill works](#how-the-skill-works)
 - [Skill files](#skill-files)
 - [Research application](#research-application)
+- [Architecture](#architecture)
 - [Run the application locally](#run-the-application-locally)
 - [Evaluation and security](#evaluation-and-security)
 - [Testing](#testing)
@@ -111,17 +112,68 @@ The skill explains when to ask a clarifying question, how to handle uncertainty,
 
 ### Architecture
 
-![PromptLab architecture diagram](docs/architecture.png)
+The diagram below shows both ways to use PromptLab: the reusable prompt-engineering skill that a compatible AI agent can follow, and the Streamlit research application that compares code-generation techniques.
 
-Core components:
+~~~mermaid
+flowchart TD
+  subgraph SKILL["Reusable prompt-engineering skill"]
+    Repo["Public GitHub repository"] --> SkillFiles["SKILL.md + technique guide + examples"]
+    SkillFiles --> Agent["Compatible AI assistant / agent"]
+    Agent --> Goal["Understand user intent and constraints"]
+    Goal --> TechniquePick["Choose task-appropriate techniques"]
+    TechniquePick --> PromptBuild["Build and review a copy-ready prompt"]
+    PromptBuild --> UserPrompt["Improved prompt returned to user"]
+  end
 
-- **Interface and access controls:** app.py
-- **Task specification and validation:** promptlab/tasks.py
-- **Trial orchestration:** promptlab/pipeline.py
-- **Prompt technique templates:** promptlab/prompts.py
-- **Provider API calls:** promptlab/provider.py
-- **Evaluation and scoring:** promptlab/sandbox.py and promptlab/scoring.py
-- **Experiment history and quota:** promptlab/storage.py
+  subgraph APP["Code-generation research application"]
+    Researcher["Researcher / developer"] --> UI["Streamlit interface: app.py"]
+    UI --> Gate["Access gate, server-side secrets and quota"]
+    Gate --> TaskSpec["Task specification: tasks.py"]
+    TaskSpec --> GroqSpec["Groq specification attempt"]
+    GroqSpec -->|Valid specification| SharedSpec["Validated specification + examples + hidden tests"]
+    GroqSpec -->|Error or invalid specification| OllamaSpec["Ollama Cloud specification fallback"]
+    OllamaSpec -->|Valid specification| SharedSpec
+    OllamaSpec -->|Error or invalid specification| GeminiSpec["Optional Gemini specification fallback"]
+    GeminiSpec -->|Valid specification| SharedSpec
+
+    SharedSpec --> Pipeline["Trial orchestration: pipeline.py"]
+    Pipeline --> Techniques["Prompt templates: prompts.py"]
+    Techniques --> GroqCode["Groq code generation"]
+    Techniques --> OllamaCode["Ollama Cloud code generation"]
+    GroqCode --> TrialResolve["Resolve primary trial results"]
+    OllamaCode --> TrialResolve
+    TrialResolve -->|At least one primary response| Eval["Evaluation: AI estimate by default / Docker opt-in"]
+    TrialResolve -->|Both primary APIs fail| GeminiCode["Optional Gemini code fallback"]
+    GeminiCode --> Eval
+    Eval --> Scoring["Scoring and ranking: scoring.py"]
+    Scoring --> Results["Results, comparisons and best candidate"]
+    Scoring --> Storage[("SQLite history and rolling-hour quota<br/>storage.py")]
+    Storage --> History["Experiment history + CSV/JSON exports"]
+    Results --> UI
+    History --> UI
+  end
+
+  classDef skill fill:#ede9fe,stroke:#7c3aed,color:#2e1065,stroke-width:1.5px;
+  classDef interface fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:1.5px;
+  classDef process fill:#f3f4f6,stroke:#6b7280,color:#111827,stroke-width:1px;
+  classDef provider fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+  classDef fallback fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:1.5px;
+  classDef output fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:1.5px;
+  class Repo,SkillFiles,Agent,Goal,TechniquePick,PromptBuild,UserPrompt skill;
+  class Researcher,UI,Gate interface;
+  class TaskSpec,SharedSpec,Pipeline,Techniques,TrialResolve,Eval,Scoring,Storage process;
+  class GroqSpec,GroqCode,OllamaSpec,OllamaCode provider;
+  class GeminiSpec,GeminiCode fallback;
+  class Results,History output;
+~~~
+
+**Reading the flow**
+
+- **Skill path:** a compatible agent reads the skill instructions and supporting examples, then uses them to improve the user's prompt. This does not train the model or automatically persist between sessions.
+- **Research path:** a task is turned into a validated specification shared by the compared techniques, then trial outputs are evaluated and ranked.
+- **Fallbacks:** Gemini is an optional fallback, not a routine comparison provider. For code-generation trials, it is called only when both primary providers return API errors; a generated solution failing evaluation alone does not trigger Gemini.
+
+The [existing static architecture image](docs/architecture.png) is also available.
 
 ### Provider fallback behavior
 
