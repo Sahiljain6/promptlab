@@ -1,56 +1,62 @@
 # Integrating the Prompt Engineering Skill
 
-The PromptLab skill is a directory of Markdown instructions and supporting resources. It does not call a model provider by itself.
+The PromptLab skill is a portable folder of Markdown instructions and supporting resources. It is not an API service and does not retrain a model.
 
-## 1. Load it by pasting the repository link
+## 1. Load it using the public repository link
 
-For an AI assistant that can browse public GitHub repositories, provide this URL:
+For an AI assistant that can access public GitHub repositories, give it this URL:
 
 https://github.com/Sahiljain6/promptlab
 
-Ask the assistant to read the following files and apply them as instructions for the current session:
+Ask it to read and apply:
 
-- skills/prompt-engineering/SKILL.md
-- skills/prompt-engineering/references/technique-selection.md
-- skills/prompt-engineering/examples/transformations.md
+- `skills/prompt-engineering/SKILL.md`
+- `skills/prompt-engineering/references/goal-to-goal-planning.md`
+- `skills/prompt-engineering/references/technique-selection.md`
+- `skills/prompt-engineering/examples/goal-to-goal-workflow.md`
+- `skills/prompt-engineering/examples/transformations.md`
 
-A ready-to-paste instruction is available in the [root README](../README.md#use-the-skill-by-pasting-the-github-link).
+The core instruction tells the agent to establish the user's goal and starting point for substantial tasks, then map phases, deliverables, dependencies, checkpoints, risks, and the definition of done before generating a copy-ready master prompt.
 
-The assistant should confirm what it actually read instead of claiming access it did not have. A repository link alone cannot force every AI product to fetch a repository; the product must have browsing, a GitHub connector, or another way to access the files.
+A ready-to-paste activation prompt is available in the [skill README](../skills/prompt-engineering/README.md).
 
-## 2. Use the raw core file as a fallback
+A repository link alone cannot force every AI product to fetch every file. The product needs browsing, a GitHub connector, or another way to retrieve repository content. The agent should report files it actually accessed.
 
-If the assistant cannot browse the repository, paste the contents of the raw core instructions:
+## 2. If the agent cannot open GitHub
+
+Provide the contents of the raw core instructions:
 
 https://raw.githubusercontent.com/Sahiljain6/promptlab/main/skills/prompt-engineering/SKILL.md
 
-If supported, also supply the technique guide and examples. A direct raw-file URL can be easier for some tools to fetch than the repository's HTML page.
+For goal mapping, also provide the raw [planning guide](https://raw.githubusercontent.com/Sahiljain6/promptlab/main/skills/prompt-engineering/references/goal-to-goal-planning.md) and [example workflow](https://raw.githubusercontent.com/Sahiljain6/promptlab/main/skills/prompt-engineering/examples/goal-to-goal-workflow.md).
 
-## 3. Install for repeated use
+## 3. Install for persistent use
 
-For an agent that supports Agent Skills, use its documented skill installation/loading mechanism and supply the full skills/prompt-engineering/ directory. Keep SKILL.md and its reference/example files together.
+If the target agent supports skills, install or register the full `skills/prompt-engineering/` directory using that platform's documented method. Keep the reference and example files alongside `SKILL.md`. Agent platforms may have different packaging, permissions, and installation behavior; follow their documentation.
 
-The expected SKILL.md layout follows the open Agent Skills pattern of YAML frontmatter with a skill name and description followed by Markdown instructions. See the [Agent Skills specification](https://agentskills.io/specification) and your platform's own documentation for exact installation paths and supported behavior.
+The skill's intended opening question for a new substantial task is:
 
-Not every agent supports the same import mechanism. Some will only follow the skill during the current conversation, while others can load it from a project or persistent skills directory.
+> What is your goal, and where are you starting from right now? Tell me what you want to achieve, what you already have or have completed, and any blockers. Plain language is fine.
 
-## 4. Use it with PromptLab's research app
+The agent should use existing conversation context so it does not ask for information the user has already given. For a simple task, it may proceed without an unnecessary interview.
 
-The Streamlit app and the portable skill serve related but distinct purposes:
+## 4. Use it with the PromptLab research app
 
-- **Portable skill:** provides prompt-improvement instructions. No API key or Streamlit runtime is needed to read the files.
-- **Research app:** runs code-generation comparisons and uses provider API credentials configured by the app owner.
+The components are related but separate:
 
-Loading the skill does not run experiments, train a model, or permanently change model weights.
+- **Portable skill:** clarifies goals, maps tasks, and creates prompts. It does not require a model-provider key.
+- **Research app:** runs code-generation comparisons and uses API credentials configured by the app owner.
 
-## Compatibility, trust, and limitations
+Loading the skill does not execute code, run benchmarks, grant repository access, or permanently change model weights.
 
-- Check the target agent's documentation before installing skills or granting repository access.
-- Review the instruction files before trusting or installing them; repository content is still third-party input.
+## Trust and limitations
+
+- Review instruction files before installing them.
 - The skill does not override higher-priority instructions or platform safety controls.
-- Do not provide secrets or confidential material unnecessarily.
-- An improved prompt does not guarantee the downstream model's answer is correct.
+- Do not paste secrets or confidential material unnecessarily.
+- Ask for confirmation before destructive, costly, external, or irreversible actions.
+- An improved prompt or roadmap does not guarantee that the downstream agent's result will be correct.
 
-## Suggested evaluation for contributors
+## Evaluation
 
-Compare skill revisions against a fixed set of prompts covering software, research, writing, data analysis, and planning. Rate intent preservation, constraint coverage, clarity, output specificity, verification, safety, and conciseness. Keep the test set and scoring rationale so reviewers can reproduce results. Do not report benchmark improvements without actual measurements.
+Compare changes against a fixed set of tasks. Rate whether the skill correctly captures the goal and starting point, maps realistic phases and dependencies, preserves constraints, provides testable checkpoints, generates a usable master prompt, and handles uncertainty safely. Save the scenarios and scoring rationale; do not claim improvement without measured results.
