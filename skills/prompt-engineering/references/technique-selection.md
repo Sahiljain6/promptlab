@@ -19,6 +19,21 @@ Choose techniques based on the failure mode in the original prompt. This is prac
 | Checkable output | Verification pass | Request relevant tests, consistency checks, or evidence | The model cannot perform the check; state the limitation |
 | Iterative work | Revision criteria | Define review criteria and a final verification pass | One pass is sufficient |
 
+## Goal-to-goal planning and decomposition
+
+For a substantial task, gather the user's **desired goal** and **starting point / current state** before constructing the final prompt. Bridge the two with a concrete route map:
+- Summarize what exists and what has already been done.
+- Describe observable end-state criteria.
+- Identify the gap between current and target states.
+- Break the work into ordered phases with tangible deliverables.
+- Record dependencies and important decisions.
+- Add verification checkpoints, likely risks, and a definition of done.
+- Specify the next smallest useful action.
+
+Ask only high-value questions, use known conversation context, and state reasonable low-risk assumptions. Do not invent progress, tools, repository structure, or results. Keep a simple task simple; use detailed phase maps for work with meaningful dependencies.
+
+See [the full planning guide](goal-to-goal-planning.md) and [goal-to-goal example](../examples/goal-to-goal-workflow.md).
+
 ## Adaptable prompt skeleton
 
 Use only relevant sections:
