@@ -1,48 +1,60 @@
 # Prompt Engineering Skill
 
-A reusable, model-independent set of instructions for improving prompts across software development, research, writing, data analysis, planning, and AI-agent workflows.
+A reusable, model-independent AI skill that helps users clarify a goal, describe their starting point, map a route from current state to desired outcome, and generate a specific master prompt for the next AI agent.
 
 ## Fastest way to use it
 
-Start by pasting the public repository link into an AI assistant that can access GitHub:
+Give an AI assistant that can access public GitHub repositories this link:
 
 ~~~text
 https://github.com/Sahiljain6/promptlab
 ~~~
 
-Then ask it to read and apply these files:
-
-- skills/prompt-engineering/SKILL.md
-- skills/prompt-engineering/references/technique-selection.md
-- skills/prompt-engineering/examples/transformations.md
-
-Use this instruction with the link:
+Then ask it to follow the skill, not merely summarize it:
 
 ~~~text
-Read the PromptLab repository above. Load skills/prompt-engineering/SKILL.md and its referenced technique-selection guide and examples. Do not merely summarize them: follow the skill for this conversation and use it to improve any prompt I give you. Preserve my goal and explicit constraints, choose techniques appropriate to the task, make important assumptions visible, and return a copy-ready improved prompt. Tell me honestly if you cannot access a file.
+Read the PromptLab repository at https://github.com/Sahiljain6/promptlab. Apply skills/prompt-engineering/SKILL.md together with its goal-to-goal planning guide, technique-selection guide, and examples.
+
+For my next substantial task, begin by making sure you understand my goal and my starting point. Ask me what I want to achieve and what I already have, have completed, or am blocked by, unless I already provided that context. Clarify only important gaps. Then map the route from current state to goal with phases, deliverables, dependencies, checkpoints, risks, and a definition of done. Generate a specific, self-contained master prompt that I can give to an AI agent. Do not merely polish my wording. Preserve all constraints, state assumptions, and do not invent progress or test results. For a small, self-contained task, keep the process lightweight.
 ~~~
 
-The assistant must be able to access the repository or fetch web pages for the link-based method to work. If it cannot fetch files, open the [raw SKILL.md](https://raw.githubusercontent.com/Sahiljain6/promptlab/main/skills/prompt-engineering/SKILL.md) and paste its contents into the conversation.
+## What should happen after loading
 
-Loading the skill gives the assistant instructions to follow in the current conversation or session; it does not retrain the underlying model. For continued use, install the folder using the target platform's supported skill mechanism. See the [integration guide](../../docs/skill-integration.md).
+For a new substantial task, the assistant should start with a short conversational intake:
+
+> **What is your goal, and where are you starting from right now?** Tell me what you want to achieve, what you already have or have completed, and any blockers. Plain language is fine.
+
+After enough context is collected, it should return:
+1. A short summary of the goal and starting point.
+2. A route map from current state to goal.
+3. A copy-ready master prompt containing that route, constraints, checkpoints, and acceptance criteria.
+4. Important assumptions or open questions, if any.
+
+The skill uses information already provided and avoids repeating questions. It does not force a lengthy interview for a simple task.
 
 ## Included files
 
-- **SKILL.md** — the core workflow and quality/safety rules.
-- **references/technique-selection.md** — technique selection guidance and an evaluation rubric.
-- **examples/transformations.md** — illustrative before-and-after transformations.
+- **SKILL.md** — default behavior, goal-first intake, roadmap mapping, master-prompt generation, quality and safety rules.
+- **references/goal-to-goal-planning.md** — how to bridge current state to the desired goal.
+- **references/technique-selection.md** — guidance for choosing prompt techniques and reviewing quality.
+- **examples/goal-to-goal-workflow.md** — illustrative intake, roadmap, and master-prompt example.
+- **examples/transformations.md** — before-and-after examples for software, research, data analysis, and writing.
+
+## Important limitation
+
+The agent needs browsing, a GitHub connector, or another method to access the public files. If it cannot fetch the repository, provide the raw [SKILL.md](https://raw.githubusercontent.com/Sahiljain6/promptlab/main/skills/prompt-engineering/SKILL.md) contents. Reading a skill guides a session; it does not retrain model weights. For repeated use, install the skill through the target platform's supported mechanism.
 
 ## Principles
 
-- Preserve the user's intent and every explicit constraint.
-- Use only techniques that address a real task need.
-- Specify expected outputs and useful acceptance criteria.
+- Understand both the desired outcome and the actual starting point.
+- Map concrete phases, deliverables, dependencies, checkpoints, and success criteria.
+- Preserve user intent and explicit constraints.
+- Ask only useful clarification questions.
 - Distinguish facts from assumptions and never invent verification.
-- Request concise rationales or validation summaries, not hidden chain-of-thought.
-- Keep prompts as short as possible while remaining complete.
+- Keep task maps and prompts proportional to task complexity.
 
 ## Contributing
 
-Issues and pull requests are welcome. Prefer reproducible examples: include the original prompt, rewritten prompt, reason for the change, and criteria used to judge it. Do not submit secrets, private user data, or proprietary prompts without permission.
+Issues and pull requests are welcome. Prefer reproducible examples: include the user's initial goal and starting point, the generated roadmap and prompt, and the criteria used to judge whether it was useful. Do not submit secrets, private user data, or proprietary prompts without permission.
 
-Check the repository's root README for the current licensing status before redistributing this material.
+Check the repository root for current licensing information before redistributing this material.
