@@ -57,8 +57,10 @@ https://github.com/Sahiljain6/promptlab
 
 Read and apply these files:
 1. skills/prompt-engineering/SKILL.md
-2. skills/prompt-engineering/references/technique-selection.md
-3. skills/prompt-engineering/examples/transformations.md
+2. skills/prompt-engineering/references/goal-to-goal-planning.md
+3. skills/prompt-engineering/references/technique-selection.md
+4. skills/prompt-engineering/examples/goal-to-goal-workflow.md
+5. skills/prompt-engineering/examples/transformations.md
 
 Do not merely summarize the files. Apply them as instructions. For my next substantial task, make sure you understand both my desired goal and my starting point (what already exists, what I have completed, and any blockers). If those details are not already in the conversation, ask me for them in a short conversational question. Clarify only important gaps.
 
@@ -113,7 +115,9 @@ See the [goal-to-goal planning guide](skills/prompt-engineering/references/goal-
 | File | Purpose |
 |---|---|
 | [SKILL.md](skills/prompt-engineering/SKILL.md) | Main instructions an AI agent should follow |
+| [Goal-to-goal planning guide](skills/prompt-engineering/references/goal-to-goal-planning.md) | Maps starting state to the goal through phases, deliverables, dependencies, checkpoints, and a definition of done |
 | [Technique selection guide](skills/prompt-engineering/references/technique-selection.md) | Maps common prompt problems to techniques and includes a review rubric |
+| [Goal-to-goal workflow example](skills/prompt-engineering/examples/goal-to-goal-workflow.md) | Shows goal/current-state intake, a phased route map, and a specific master prompt |
 | [Transformation examples](skills/prompt-engineering/examples/transformations.md) | Before-and-after examples for software, research, data analysis, and writing |
 | [Skill README](skills/prompt-engineering/README.md) | Quick start and skill overview |
 | [Integration guide](docs/skill-integration.md) | Ways to load the skill in different AI environments |
