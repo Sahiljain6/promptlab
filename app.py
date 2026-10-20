@@ -100,15 +100,6 @@ def redact_error(value: object) -> str:
     return message[:700]
 
 with st.sidebar:
-    st.header("Connected models")
-    st.success("Groq configured" if groq_key else "Missing GROQ_API_KEY")
-    st.success("Gemini configured" if gemini_key else "Missing GEMINI_API_KEY")
-    st.caption("Ollama backup configured" if ollama_key else "Optional Ollama backup not configured")
-    st.caption("Groq and Gemini are the primary comparison providers. Ollama is called only if both primary providers fail.")
-    st.caption("API keys are never displayed.")
-    st.caption(f"Groq model: {GROQ_MODEL}")
-    st.caption(f"Gemini model: {GEMINI_MODEL}")
-    st.caption(f"Ollama backup model: {OLLAMA_MODEL}")
     st.header("Experiment settings")
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     exec_label = st.selectbox(
@@ -334,7 +325,7 @@ with tab_run:
             with st.expander(label):
                 if rec["error_message"]:
                     st.warning(rec["error_message"])
-                st.caption(f"Model: {rec.get('model') or model_names.get(rec['provider'], 'unknown')} · Generation: {rec['latency_seconds']} s")
+                st.caption(f"Provider: {rec['provider']} · Generation: {rec['latency_seconds']} s")
                 if rec["generated_code"]:
                     st.code(rec["generated_code"], language="python")
                 if rec["test_results"]:
