@@ -59,7 +59,14 @@ st.caption("Automatic Groq + Gemini comparison across prompt-engineering techniq
 GROQ_MODEL = secret_or_env("GROQ_MODEL", "openai/gpt-oss-20b")
 OLLAMA_MODEL = secret_or_env("OLLAMA_MODEL", "gpt-oss:20b-cloud")
 OLLAMA_BASE_URL = secret_or_env("OLLAMA_BASE_URL", "https://ollama.com/v1").rstrip("/")
-GEMINI_MODEL = secret_or_env("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_MODEL = secret_or_env("GEMINI_MODEL", "gemini-3.8-flash").strip()
+# Optional comma-separated Gemini model IDs, tried in order only when the current model is rate-limited.
+# Configure only model IDs enabled for your Gemini API project.
+GEMINI_FALLBACK_MODELS = [
+    item.strip()
+    for item in secret_or_env("GEMINI_FALLBACK_MODELS", "").split(",")
+    if item.strip() and item.strip() != GEMINI_MODEL
+]
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 groq_key = secret_or_env("GROQ_API_KEY")
 gemini_key = secret_or_env("GEMINI_API_KEY")
@@ -131,9 +138,45 @@ def evaluator():
     )
 
 
+def make_gemini_with_rate_limit_fallback():
+    """Try configured Gemini models in order; switch only when the current model is rate-limited."""
+    model_order = [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]
+    clients = [
+        (model, make_llm("Gemini", gemini_key, model, temperature, GEMINI_BASE_URL))
+        for model in model_order
+    ]
+
+    def call(prompt: str, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
+        last_error = None
+        for index, (model, client) in enumerate(clients):
+            try:
+                result = client(
+                    prompt,
+                    system=system,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    reasoning_effort=reasoning_effort,
+                )
+                # Keep internal model metadata out of the user-facing UI and saved results.
+                result.model = "Gemini"
+                return result
+            except Exception as exc:
+                last_error = exc
+                status_code = getattr(exc, "status_code", None)
+                body = getattr(exc, "body", None)
+                message = str(exc).lower()
+                is_rate_limit = status_code == 429 or "rate limit" in message or "quota" in message or "resource_exhausted" in message
+                if not is_rate_limit or index == len(clients) - 1:
+                    raise
+        raise last_error
+
+    call.provider_name = "Gemini"
+    return call
+
+
 llms = {
     "Groq": make_llm("Groq", groq_key, GROQ_MODEL, temperature),
-    "Gemini": make_llm("Gemini", gemini_key, GEMINI_MODEL, temperature, GEMINI_BASE_URL),
+    "Gemini": make_gemini_with_rate_limit_fallback(),
 }
 ollama_llm = (
     make_llm("Custom OpenAI-compatible", ollama_key, OLLAMA_MODEL, temperature, OLLAMA_BASE_URL)
