@@ -142,7 +142,7 @@ See the [goal-to-goal planning guide](skills/prompt-engineering/references/goal-
 - Ten prompt techniques: zero-shot, few-shot, persona-based, function signature and docstring, structured specification, private planning, chain-of-thought-style prompting, structured reasoning format, decomposition, and self-repair.
 - Shared task specification, visible examples, and test cases to improve comparison consistency.
 - Task-specification validation, parsing recovery, retries, and provider fallback.
-- Optional Gemini fallback for defined API-error cases.
+- Optional Ollama Cloud fallback when both primary providers return API errors.
 - Scoring and ranking based on accuracy or estimated correctness, latency, token usage, and available execution timing.
 - Experiment history and CSV/JSON exports.
 
@@ -198,8 +198,8 @@ flowchart TD
   class Repo,SkillFiles,Agent,Goal,TechniquePick,PromptBuild,UserPrompt skill;
   class Researcher,UI,Gate interface;
   class TaskSpec,SharedSpec,Pipeline,Techniques,TrialResolve,Eval,Scoring,Storage process;
-  class GroqSpec,GroqCode,OllamaSpec,OllamaCode provider;
-  class GeminiSpec,GeminiCode fallback;
+  class GroqSpec,GroqCode,GeminiSpec,GeminiCode provider;
+  class OllamaSpec,OllamaCode fallback;
   class Results,History output;
 ~~~
 
