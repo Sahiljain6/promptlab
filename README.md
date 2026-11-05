@@ -21,6 +21,7 @@ PromptLab combines two related but distinct components: a portable skill that he
 - [Architecture](#architecture)
 - [Run the application locally](#run-the-application-locally)
 - [Evaluation and security](#evaluation-and-security)
+- [Provider routing and fallback guide](docs/provider-routing.md)
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [License and reuse](#license-and-reuse)
@@ -212,7 +213,7 @@ The [existing static architecture image](docs/architecture.png) is also availabl
 
 ### Provider fallback behavior
 
-For a custom task specification, PromptLab tries Groq first, Gemini second, and the optional Ollama Cloud backup third if the earlier providers cannot produce a valid specification. For code generation, Groq and Gemini are the primary comparison providers; Ollama is called only when both primary runs return API errors for the same technique/trial. A generated solution failing evaluation does not trigger the backup.
+For a custom task specification, PromptLab tries Groq first, Gemini second, and the optional Ollama Cloud backup third if the earlier providers cannot produce a valid specification. For code generation, Groq and Gemini are the primary comparison providers; Ollama is called only when both primary runs return API errors for the same technique/trial. A generated solution failing evaluation does not trigger the backup. See the [provider routing and fallback guide](docs/provider-routing.md) for configuration details and troubleshooting.
 
 ## Run the application locally
 
