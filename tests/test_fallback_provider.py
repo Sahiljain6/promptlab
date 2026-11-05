@@ -40,7 +40,13 @@ def evaluator(code, function_name, tests):
         "passed_tests": len(tests),
         "total_tests": len(tests),
         "results": [
-            {"case": index, "passed": True, "expected": case["expected"], "actual": case["expected"], "error": None}
+            {
+                "case": index,
+                "passed": True,
+                "expected": case["expected"],
+                "actual": case["expected"],
+                "error": None,
+            }
             for index, case in enumerate(tests, 1)
         ],
         "error": None,
@@ -49,135 +55,162 @@ def evaluator(code, function_name, tests):
     }
 
 
-class GeminiFallbackTests(unittest.TestCase):
-    def test_gemini_spec_fallback_is_called_only_after_groq_and_ollama_fail(self):
-        call_order = []
+def failing_provider(name, calls):
+    def call(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
+        calls.append(name)
+        raise RuntimeError(f"{name} unavailable")
 
-        def failing_provider(name):
-            def call(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
-                call_order.append(name)
-                raise RuntimeError(f"{name} unavailable")
-            return call
+    return call
 
-        def gemini(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
-            call_order.append("Gemini")
-            return generation(json.dumps(SPEC))
 
-        spec, source, diagnostics = generate_shared_spec(
-            "Create a prime checker",
-            {
-                "Groq": failing_provider("Groq"),
-                "Ollama": failing_provider("Ollama"),
-                "Gemini": gemini,
-            },
-        )
-        self.assertEqual(spec.function_name, "is_prime")
-        self.assertEqual(source, "Gemini")
-        self.assertIn("Groq", diagnostics)
-        self.assertIn("Ollama", diagnostics)
-        self.assertEqual(call_order[-1], "Gemini")
-        self.assertEqual(call_order.count("Gemini"), 1)
-        gemini_index = call_order.index("Gemini")
-        self.assertIn("Groq", call_order[:gemini_index])
-        self.assertIn("Ollama", call_order[:gemini_index])
-        self.assertTrue(all(name != "Gemini" for name in call_order[:gemini_index]))
-
-    def test_gemini_spec_fallback_stays_idle_when_ollama_recovers(self):
+class PrimaryAndBackupProviderTests(unittest.TestCase):
+    def test_groq_spec_success_keeps_gemini_and_ollama_idle(self):
         calls = []
 
         def groq(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
             calls.append("Groq")
-            raise RuntimeError("Groq unavailable")
+            return generation(json.dumps(SPEC))
+
+        def unused(name):
+            def call(*args, **kwargs):
+                self.fail(f"{name} must remain idle when Groq produces a valid specification")
+            return call
+
+        spec, source, _ = generate_shared_spec(
+            "Create a prime checker",
+            {"Groq": groq, "Gemini": unused("Gemini"), "Ollama": unused("Ollama")},
+        )
+
+        self.assertEqual(spec.function_name, "is_prime")
+        self.assertEqual(source, "Groq")
+        self.assertEqual(calls, ["Groq"])
+
+    def test_gemini_spec_is_second_choice_after_groq_fails(self):
+        calls = []
+
+        def gemini(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
+            calls.append("Gemini")
+            return generation(json.dumps(SPEC))
+
+        def unused_ollama(*args, **kwargs):
+            self.fail("Ollama must remain idle when Gemini produces a valid specification")
+
+        spec, source, diagnostics = generate_shared_spec(
+            "Create a prime checker",
+            {
+                "Groq": failing_provider("Groq", calls),
+                "Gemini": gemini,
+                "Ollama": unused_ollama,
+            },
+        )
+
+        self.assertEqual(spec.function_name, "is_prime")
+        self.assertEqual(source, "Gemini")
+        self.assertIn("Groq", diagnostics)
+        self.assertEqual(calls, ["Groq", "Gemini"])
+
+    def test_ollama_spec_fallback_runs_only_after_both_primary_providers_fail(self):
+        calls = []
 
         def ollama(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
             calls.append("Ollama")
             return generation(json.dumps(SPEC))
 
-        def gemini(prompt, system=None, max_tokens=1500, response_format=None, reasoning_effort=None):
-            calls.append("Gemini")
-            raise AssertionError("Gemini must remain idle when Ollama succeeds")
-
-        _, source, _ = generate_shared_spec(
+        spec, source, diagnostics = generate_shared_spec(
             "Create a prime checker",
-            {"Groq": groq, "Ollama": ollama, "Gemini": gemini},
+            {
+                "Groq": failing_provider("Groq", calls),
+                "Gemini": failing_provider("Gemini", calls),
+                "Ollama": ollama,
+            },
         )
+
+        self.assertEqual(spec.function_name, "is_prime")
         self.assertEqual(source, "Ollama")
-        self.assertNotIn("Gemini", calls)
+        self.assertEqual(set(calls), {"Groq", "Gemini", "Ollama"})
+        self.assertIn("Groq", diagnostics)
+        self.assertIn("Gemini", diagnostics)
 
-    def test_gemini_code_fallback_runs_only_when_both_primary_calls_fail(self):
-        gemini_calls = []
+    def test_ollama_code_fallback_runs_only_when_both_primary_calls_fail(self):
+        spec = parse_spec("Create a prime checker", SPEC)
+        fallback_calls = []
 
-        def failed(prompt, system=None, max_tokens=1500):
-            raise RuntimeError("provider unavailable")
-
-        def gemini(prompt, system=None, max_tokens=1500):
-            gemini_calls.append(prompt)
+        def ollama(prompt, system=None, max_tokens=1500):
+            fallback_calls.append(prompt)
             return generation("def is_prime(n):\n    return n > 1\n")
 
-        spec = parse_spec("Create a prime checker", SPEC)
         records = run_all(
             spec,
             ["zero_shot"],
-            {"Groq": failed, "Ollama": failed},
+            {
+                "Groq": failing_provider("Groq", []),
+                "Gemini": failing_provider("Gemini", []),
+            },
             evaluator,
             workers=2,
-            fallback_llm=gemini,
-            fallback_provider_name="Gemini (fallback)",
+            fallback_llm=ollama,
+            fallback_provider_name="Ollama (fallback)",
         )
-        self.assertEqual(len(gemini_calls), 1)
+
+        self.assertEqual(len(fallback_calls), 1)
         self.assertEqual(len(records), 3)
-        fallback = next(record for record in records if record["provider"] == "Gemini (fallback)")
+        fallback = next(record for record in records if record["provider"] == "Ollama (fallback)")
         self.assertEqual(fallback["status"], "PASSED")
 
-    def test_empty_primary_response_counts_as_api_error_and_uses_gemini(self):
-        gemini_calls = []
-
-        def empty_groq(prompt, system=None, max_tokens=1500):
-            return generation("  ")
-
-        def failed_ollama(prompt, system=None, max_tokens=1500):
-            raise RuntimeError("Ollama unavailable")
-
-        def gemini(prompt, system=None, max_tokens=1500):
-            gemini_calls.append(prompt)
-            return generation("def is_prime(n):\n    return n > 1\n")
-
+    def test_ollama_stays_idle_when_either_primary_provider_returns_code(self):
         spec = parse_spec("Create a prime checker", SPEC)
-        records = run_all(
-            spec,
-            ["zero_shot"],
-            {"Groq": empty_groq, "Ollama": failed_ollama},
-            evaluator,
-            workers=2,
-            fallback_llm=gemini,
-        )
-        self.assertEqual(len(gemini_calls), 1)
-        self.assertTrue(any(record["provider"] == "Gemini (fallback)" for record in records))
-
-    def test_gemini_code_fallback_stays_idle_if_one_primary_succeeds(self):
-        gemini_calls = []
+        fallback_calls = []
 
         def groq(prompt, system=None, max_tokens=1500):
             return generation("def is_prime(n):\n    return n > 1\n")
 
-        def failed_ollama(prompt, system=None, max_tokens=1500):
-            raise RuntimeError("Ollama unavailable")
+        def ollama(prompt, system=None, max_tokens=1500):
+            fallback_calls.append(prompt)
+            self.fail("Ollama must remain idle when one primary provider returns a response")
 
-        def gemini(prompt, system=None, max_tokens=1500):
-            gemini_calls.append(prompt)
-            return generation("def is_prime(n):\n    return n > 1\n")
-
-        spec = parse_spec("Create a prime checker", SPEC)
         records = run_all(
             spec,
             ["zero_shot"],
-            {"Groq": groq, "Ollama": failed_ollama},
+            {
+                "Groq": groq,
+                "Gemini": failing_provider("Gemini", []),
+            },
             evaluator,
             workers=2,
-            fallback_llm=gemini,
+            fallback_llm=ollama,
+            fallback_provider_name="Ollama (fallback)",
         )
-        self.assertEqual(len(gemini_calls), 0)
+
+        self.assertEqual(fallback_calls, [])
         self.assertEqual(len(records), 2)
+        self.assertNotIn("Ollama (fallback)", {record["provider"] for record in records})
+
+    def test_empty_primary_response_counts_as_api_error_for_backup_decision(self):
+        spec = parse_spec("Create a prime checker", SPEC)
+        fallback_calls = []
+
+        def empty_groq(prompt, system=None, max_tokens=1500):
+            return generation("  ")
+
+        def ollama(prompt, system=None, max_tokens=1500):
+            fallback_calls.append(prompt)
+            return generation("def is_prime(n):\n    return n > 1\n")
+
+        records = run_all(
+            spec,
+            ["zero_shot"],
+            {
+                "Groq": empty_groq,
+                "Gemini": failing_provider("Gemini", []),
+            },
+            evaluator,
+            workers=2,
+            fallback_llm=ollama,
+            fallback_provider_name="Ollama (fallback)",
+        )
+
+        self.assertEqual(len(fallback_calls), 1)
+        self.assertTrue(any(record["provider"] == "Ollama (fallback)" for record in records))
 
 
 if __name__ == "__main__":
