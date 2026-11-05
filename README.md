@@ -43,7 +43,7 @@ After the user answers, the agent clarifies only important gaps, maps the route 
 
 ### 2. Code-generation research application
 
-The Streamlit app supports the study **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It compares techniques across Groq and Ollama Cloud, evaluates results in the configured evaluation mode, ranks trials, and saves experiment history. Gemini is an optional last-resort fallback for defined provider-error cases, rather than a routine comparison provider.
+The Streamlit app supports the study **“A Comparative Study of Prompt Engineering Techniques for Improving Code Generation Accuracy in LLMs.”** It compares code-generation techniques across Groq and Gemini, evaluates results in the configured evaluation mode, ranks trials, and saves experiment history. Ollama Cloud is an optional last-resort backup used only when both primary providers return API errors for the same technique and trial.
 
 > **Important distinction:** The portable skill improves prompts. The research application runs model-based code-generation experiments. Loading the skill does not automatically connect to the app's APIs or run benchmarks.
 
@@ -137,7 +137,7 @@ See the [goal-to-goal planning guide](skills/prompt-engineering/references/goal-
 
 ### Features
 
-- Automatic Groq and Ollama Cloud comparison for code-generation tasks.
+- Automatic Groq and Gemini comparison for code-generation tasks, with Ollama Cloud as a last-resort backup.
 - Ten prompt techniques: zero-shot, few-shot, persona-based, function signature and docstring, structured specification, private planning, chain-of-thought-style prompting, structured reasoning format, decomposition, and self-repair.
 - Shared task specification, visible examples, and test cases to improve comparison consistency.
 - Task-specification validation, parsing recovery, retries, and provider fallback.
@@ -166,20 +166,20 @@ flowchart TD
     Gate --> TaskSpec["Task specification: tasks.py"]
     TaskSpec --> GroqSpec["Groq specification attempt"]
     GroqSpec -->|Valid specification| SharedSpec["Validated specification + examples + hidden tests"]
-    GroqSpec -->|Error or invalid specification| OllamaSpec["Ollama Cloud specification fallback"]
-    OllamaSpec -->|Valid specification| SharedSpec
-    OllamaSpec -->|Error or invalid specification| GeminiSpec["Optional Gemini specification fallback"]
+    GroqSpec -->|Error or invalid specification| GeminiSpec["Gemini specification fallback"]
     GeminiSpec -->|Valid specification| SharedSpec
+    GeminiSpec -->|Error or invalid specification| OllamaSpec["Optional Ollama Cloud specification fallback"]
+    OllamaSpec -->|Valid specification| SharedSpec
 
     SharedSpec --> Pipeline["Trial orchestration: pipeline.py"]
     Pipeline --> Techniques["Prompt templates: prompts.py"]
     Techniques --> GroqCode["Groq code generation"]
-    Techniques --> OllamaCode["Ollama Cloud code generation"]
+    Techniques --> GeminiCode["Gemini code generation"]
     GroqCode --> TrialResolve["Resolve primary trial results"]
-    OllamaCode --> TrialResolve
+    GeminiCode --> TrialResolve
     TrialResolve -->|At least one primary response| Eval["Evaluation: AI estimate by default / Docker opt-in"]
-    TrialResolve -->|Both primary APIs fail| GeminiCode["Optional Gemini code fallback"]
-    GeminiCode --> Eval
+    TrialResolve -->|Both primary APIs fail| OllamaCode["Optional Ollama Cloud code fallback"]
+    OllamaCode --> Eval
     Eval --> Scoring["Scoring and ranking: scoring.py"]
     Scoring --> Results["Results, comparisons and best candidate"]
     Scoring --> Storage[("SQLite history and rolling-hour quota<br/>storage.py")]
@@ -206,13 +206,13 @@ flowchart TD
 
 - **Skill path:** a compatible agent reads the skill instructions and supporting examples, then uses them to improve the user's prompt. This does not train the model or automatically persist between sessions.
 - **Research path:** a task is turned into a validated specification shared by the compared techniques, then trial outputs are evaluated and ranked.
-- **Fallbacks:** Gemini is an optional fallback, not a routine comparison provider. For code-generation trials, it is called only when both primary providers return API errors; a generated solution failing evaluation alone does not trigger Gemini.
+- **Fallbacks:** Ollama Cloud is optional, not a routine comparison provider. For code-generation trials, it is called only when both Groq and Gemini return API errors for the same technique/trial; a generated solution failing evaluation alone does not trigger Ollama.
 
 The [existing static architecture image](docs/architecture.png) is also available.
 
 ### Provider fallback behavior
 
-For custom task specification, PromptLab tries Groq, then Ollama Cloud, then the optional Gemini fallback if both primary providers fail to produce a valid specification. For code generation, Groq and Ollama Cloud are the primary comparison providers; Gemini is only called when both primary provider runs return API errors for the same trial. It is not called simply because generated code fails evaluation.
+For a custom task specification, PromptLab tries Groq first, Gemini second, and the optional Ollama Cloud backup third if the earlier providers cannot produce a valid specification. For code generation, Groq and Gemini are the primary comparison providers; Ollama is called only when both primary runs return API errors for the same technique/trial. A generated solution failing evaluation does not trigger the backup.
 
 ## Run the application locally
 
@@ -221,7 +221,7 @@ The skill does not need these dependencies. Follow this section only if you want
 ### Requirements
 
 - Python 3.12, matching the current CI configuration
-- Provider API credentials for Groq and Ollama Cloud
+- Provider API credentials for Groq and Gemini; Ollama Cloud credentials are optional for the backup
 - A long, private application access password
 
 ### Windows setup
@@ -261,11 +261,11 @@ For Streamlit Community Cloud, configure these values under the app's **Settings
 
 ~~~toml
 GROQ_API_KEY = "your-groq-api-key"
-OLLAMA_API_KEY = "your-ollama-cloud-api-key"
+GEMINI_API_KEY = "your-gemini-api-key"
 PROMPTLAB_ACCESS_PASSWORD = "replace-with-a-long-random-password"
 
 # Optional last-resort backup
-GEMINI_API_KEY = "your-gemini-api-key"
+OLLAMA_API_KEY = "your-ollama-cloud-api-key"
 ~~~
 
 The app remains locked unless PROMPTLAB_ACCESS_PASSWORD is configured. Never commit real API keys or share the app access password publicly. If the default Ollama model is unavailable to your account, configure OLLAMA_MODEL for a model you can access. Ollama Cloud's OpenAI-compatible endpoint is https://ollama.com/v1; see the [Ollama compatibility documentation](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx).
